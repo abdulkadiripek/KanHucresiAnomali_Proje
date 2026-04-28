@@ -72,8 +72,10 @@ class Preprocessor:
         categorical_cols = X.select_dtypes(include=["object"]).columns.tolist()
         numerical_cols = X.select_dtypes(include=["number"]).columns.tolist()
 
-        # One-Hot Encoding
+        # One-Hot Encoding and ensure all feature columns are numeric/float for XGBoost
         X = pd.get_dummies(X, columns=categorical_cols, drop_first=True)
+        # Avoid pandas boolean/category type errors in XGBoost
+        X = X.astype(float)
 
         # Variance Threshold
         if self.variance_threshold is not None:
