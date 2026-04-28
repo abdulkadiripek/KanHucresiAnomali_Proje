@@ -232,131 +232,350 @@ class Visualizer:
         return fig
 
     # ------------------------------------------------------------------
-    # EDA Grafikleri
+    # EDA Grafikleri — Hikaye anlatan, otomatik seçimli (kullanıcı seçmez)
     # ------------------------------------------------------------------
 
-    def plot_class_distribution(self, labels: pd.Series):
-        """Anomali sınıf dağılımı pie chart."""
-        counts = labels.value_counts()
-        fig, ax = plt.subplots(figsize=(5, 5))
+    @staticmethod
+    def compute_cohens_d(group1: pd.Series, group2: pd.Series) -> float:
+        """Cohen's d effect size — iki grup ortalaması arasındaki standardize fark.
+
+        |d| < 0.2 ihmal edilebilir, 0.2-0.5 küçük, 0.5-0.8 orta, > 0.8 büyük etki.
+        """
+        n1, n2 = len(group1), len(group2)
+        if n1 < 2 or n2 < 2:
+            return 0.0
+        s1, s2 = group1.std(ddof=1), group2.std(ddof=1)
+        pooled = np.sqrt(((n1 - 1) * s1 ** 2 + (n2 - 1) * s2 ** 2) / (n1 + n2 - 2))
+        if pooled == 0 or np.isnan(pooled):
+            return 0.0
+        return (group1.mean() - group2.mean()) / pooled
+
+    def plot_leakage_evidence(
+        self,
+        raw_df: pd.DataFrame,
+        target_col: str = "anomaly_label",
+        leakage_cols: Optional[list] = None,
+    ):
+        """Tüm sayısal sütunların hedefle mutlak korelasyonu — leakage atma gerekçesi.
+
+        Atılan sütunlar kırmızı, modele giren sütunlar yeşil tonda.
+        """
+        leakage_cols = leakage_cols or []
+        num_df = raw_df.select_dtypes(include=["number"]).copy()
+        if target_col not in num_df.columns:
+            num_df[target_col] = raw_df[target_col]
+
+        corr = num_df.corr()[target_col].drop(target_col).abs().sort_values(ascending=True)
+
+        colors = [
+            self.COLORS["primary"] if col in leakage_cols else self.COLORS["success"]
+            for col in corr.index
+        ]
+
+        fig, ax = plt.subplots(figsize=(10, max(5, len(corr) * 0.28)))
+        self._apply_style(fig, ax)
+
+        ax.barh(range(len(corr)), corr.values, color=colors,
+                edgecolor="white", linewidth=0.3, alpha=0.92)
+        ax.set_yticks(range(len(corr)))
+        ax.set_yticklabels(corr.index, fontsize=8.5, color=self.COLORS["text"])
+        ax.set_xlabel("|Pearson Korelasyon| (anomaly_label ile)",
+                      color=self.COLORS["text"], fontsize=11)
+        ax.set_title(
+            "Veri Sızıntısı (Data Leakage) Kanıtı\n"
+            "Kırmızı: Hedefi ele veren sütunlar (atıldı)  |  Yeşil: Modele giren gerçek özellikler",
+            color=self.COLORS["secondary"], fontsize=13, weight="bold", pad=12,
+        )
+        ax.axvline(x=0.5, color=self.COLORS["secondary"], linestyle="--",
+                   alpha=0.4, linewidth=1)
+        ax.text(0.51, 0.5, "Şüpheli eşik (0.5)", color=self.COLORS["secondary"],
+                fontsize=8, alpha=0.7, transform=ax.get_yaxis_transform())
+        ax.grid(True, axis="x", alpha=0.1)
+        plt.tight_layout()
+        return fig
+
+    def plot_class_imbalance_donut(self, labels: pd.Series):
+        """Sınıf dengesizliği donut chart — ortasında oran metni."""
+        counts = labels.value_counts().sort_index()
+        n_normal = int(counts.get(0, 0))
+        n_anomaly = int(counts.get(1, 0))
+        total = n_normal + n_anomaly
+        anomaly_pct = (n_anomaly / total * 100) if total else 0
+
+        fig, ax = plt.subplots(figsize=(7, 5.5))
         fig.patch.set_facecolor(self.COLORS["bg_dark"])
 
-        colors_pie = [self.COLORS["accent"], self.COLORS["primary"]]
-        wedges, texts, autotexts = ax.pie(
-            counts.values,
-            labels=["Normal (0)", "Anomali (1)"],
-            colors=colors_pie,
-            autopct="%1.1f%%",
+        colors_donut = [self.COLORS["accent"], self.COLORS["primary"]]
+        wedges, _ = ax.pie(
+            [n_normal, n_anomaly],
+            colors=colors_donut,
             startangle=90,
-            textprops={"color": self.COLORS["text"], "fontsize": 12},
-            wedgeprops={"edgecolor": self.COLORS["bg_dark"], "linewidth": 2},
-            explode=(0, 0.05),
+            wedgeprops={"width": 0.38, "edgecolor": self.COLORS["bg_dark"], "linewidth": 3},
         )
-        for t in autotexts:
-            t.set_fontweight("bold")
-        ax.set_title("Sınıf Dağılımı", color=self.COLORS["secondary"],
-                      fontsize=14, weight="bold")
-        return fig
 
-    def plot_cell_type_distribution(self, df: pd.DataFrame, col: str = "cell_type"):
-        """Hücre tipi dağılımı bar chart."""
-        fig, ax = plt.subplots(figsize=(10, 5))
-        self._apply_style(fig, ax)
+        # Ortadaki metin
+        ax.text(0, 0.08, f"%{anomaly_pct:.1f}",
+                ha="center", va="center", fontsize=32, weight="bold",
+                color=self.COLORS["primary"])
+        ax.text(0, -0.18, "Anomali", ha="center", va="center",
+                fontsize=11, color=self.COLORS["text_muted"], weight="500")
 
-        ct_counts = df[col].value_counts()
-        norm_vals = ct_counts.values / ct_counts.values.max()
-        colors = [plt.cm.magma(0.3 + 0.5 * v) for v in norm_vals]
-
-        ax.bar(range(len(ct_counts)), ct_counts.values, color=colors,
-               edgecolor="white", linewidth=0.3, alpha=0.9)
-        ax.set_xticks(range(len(ct_counts)))
-        ax.set_xticklabels(ct_counts.index, rotation=45, ha="right",
-                           fontsize=8, color=self.COLORS["text"])
-        ax.set_ylabel("Sayı", color=self.COLORS["text"])
-        ax.set_title("Hücre Tipi Dağılımı", color=self.COLORS["secondary"],
-                      fontsize=14, weight="bold", pad=10)
-        ax.grid(True, axis="y", alpha=0.1)
-        plt.tight_layout()
-        return fig
-
-    def plot_feature_histogram(self, df: pd.DataFrame, feature: str,
-                                target_col: str = "anomaly_label"):
-        """Normal vs Anomali özellik dağılımı histogram."""
-        fig, ax = plt.subplots(figsize=(10, 4))
-        self._apply_style(fig, ax)
-
-        for label, color, lbl_text in [
-            (0, self.COLORS["accent"], "Normal"),
-            (1, self.COLORS["primary"], "Anomali"),
-        ]:
-            subset = df[df[target_col] == label][feature]
-            ax.hist(subset, bins=40, alpha=0.6, color=color, label=lbl_text,
-                    edgecolor="white", linewidth=0.2)
-
-        ax.set_xlabel(feature, color=self.COLORS["text"], fontsize=11)
-        ax.set_ylabel("Frekans", color=self.COLORS["text"], fontsize=11)
-        ax.set_title(f"{feature} Dağılımı (Normal vs Anomali)",
-                      color=self.COLORS["secondary"], fontsize=13, weight="bold", pad=10)
-        ax.legend(facecolor=self.COLORS["bg_card"], edgecolor="#333",
-                  labelcolor=self.COLORS["text"])
-        ax.grid(True, axis="y", alpha=0.1)
-        plt.tight_layout()
-        return fig
-
-    def plot_correlation_matrix(self, df: pd.DataFrame):
-        """Korelasyon matrisi heatmap."""
-        corr = df.select_dtypes(include=["number"]).corr()
-        fig, ax = plt.subplots(figsize=(14, 10))
-        self._apply_style(fig, ax)
-
-        mask = np.triu(np.ones_like(corr, dtype=bool), k=1)
-        sns.heatmap(
-            corr, mask=mask, annot=True, fmt=".2f", cmap="coolwarm",
-            center=0, linewidths=0.5, linecolor=self.COLORS["bg_dark"],
-            ax=ax, annot_kws={"size": 6}, square=True,
-            cbar_kws={"shrink": 0.8},
+        # Legend
+        ax.legend(
+            wedges,
+            [f"Normal  ·  {n_normal:,}", f"Anomali  ·  {n_anomaly:,}"],
+            loc="center left", bbox_to_anchor=(1.0, 0.5),
+            fontsize=10, facecolor=self.COLORS["bg_card"],
+            edgecolor="#333", labelcolor=self.COLORS["text"],
+            frameon=True,
         )
-        ax.set_title("Özellik Korelasyon Matrisi", color=self.COLORS["secondary"],
-                      fontsize=14, weight="bold", pad=15)
-        ax.tick_params(colors=self.COLORS["text"], labelsize=7)
+
+        ax.set_title("Sınıf Dengesizliği",
+                     color=self.COLORS["secondary"], fontsize=14, weight="bold", pad=15)
         plt.tight_layout()
         return fig
 
-    def plot_box_anomaly_comparison(self, df: pd.DataFrame, features: list,
-                                     target_col: str = "anomaly_label"):
-        """Normal vs Anomali box plot karşılaştırması (seçili özellikler)."""
+    def plot_cohens_d_top_features(
+        self,
+        df_clean: pd.DataFrame,
+        target_col: str = "anomaly_label",
+        top_n: int = 10,
+    ) -> tuple:
+        """Cohen's d ile sınıflar arası en ayırt edici özellikler.
+
+        Returns:
+            (fig, top_features_list)
+        """
+        num_df = df_clean.select_dtypes(include=["number"]).drop(columns=[target_col], errors="ignore")
+        y = df_clean[target_col]
+
+        d_values = {}
+        for col in num_df.columns:
+            g0 = num_df.loc[y == 0, col].dropna()
+            g1 = num_df.loc[y == 1, col].dropna()
+            d_values[col] = abs(self.compute_cohens_d(g1, g0))
+
+        d_series = pd.Series(d_values).sort_values(ascending=True)
+        top_series = d_series.tail(top_n)
+
+        # Etki büyüklüğüne göre renklendir
+        def _effect_color(d):
+            if d >= 0.8:
+                return self.COLORS["primary"]    # büyük
+            elif d >= 0.5:
+                return self.COLORS["secondary"]  # orta
+            elif d >= 0.2:
+                return self.COLORS["accent"]     # küçük
+            return self.COLORS["text_muted"]     # ihmal edilebilir
+
+        colors = [_effect_color(v) for v in top_series.values]
+
+        fig, ax = plt.subplots(figsize=(10, max(4.5, top_n * 0.5)))
+        self._apply_style(fig, ax)
+
+        bars = ax.barh(range(len(top_series)), top_series.values, color=colors,
+                       edgecolor="white", linewidth=0.3, alpha=0.92)
+        ax.set_yticks(range(len(top_series)))
+        ax.set_yticklabels(top_series.index, fontsize=10, color=self.COLORS["text"])
+        ax.set_xlabel("|Cohen's d| (Etki Büyüklüğü)",
+                      color=self.COLORS["text"], fontsize=11)
+        ax.set_title(
+            f"Top {top_n} Ayırt Edici Özellik — Cohen's d Etki Büyüklüğü\n"
+            "Modelin en güçlü sinyalleri buradan geliyor",
+            color=self.COLORS["secondary"], fontsize=13, weight="bold", pad=12,
+        )
+
+        # Eşik çizgileri
+        for thr, label in [(0.2, "Küçük"), (0.5, "Orta"), (0.8, "Büyük")]:
+            ax.axvline(x=thr, color=self.COLORS["text_muted"],
+                       linestyle="--", alpha=0.3, linewidth=1)
+            ax.text(thr, len(top_series) - 0.4, label, fontsize=8,
+                    color=self.COLORS["text_muted"], ha="center", alpha=0.7)
+
+        # Bar üstü değer
+        for bar, val in zip(bars, top_series.values):
+            ax.text(val + 0.01, bar.get_y() + bar.get_height() / 2,
+                    f"{val:.2f}", va="center", fontsize=8.5,
+                    color=self.COLORS["text"], weight="bold")
+
+        ax.grid(True, axis="x", alpha=0.1)
+        plt.tight_layout()
+
+        top_features = list(top_series.index[::-1])  # en güçlüden zayıfa
+        return fig, top_features
+
+    def plot_top_features_kde(
+        self,
+        df_clean: pd.DataFrame,
+        features: list,
+        target_col: str = "anomaly_label",
+    ):
+        """Top N özellik için Normal vs Anomali yoğunluk (KDE) dağılımı.
+
+        2x2 (4 özellik) veya 1x3 (3 özellik) grid otomatik.
+        """
+        from scipy.stats import gaussian_kde
+
         n = len(features)
-        cols = min(3, n)
-        rows = (n + cols - 1) // cols
-        fig, axes = plt.subplots(rows, cols, figsize=(5 * cols, 4 * rows))
+        if n == 0:
+            return None
+
+        if n <= 2:
+            rows, cols = 1, n
+        elif n <= 4:
+            rows, cols = 2, 2
+        else:
+            cols = 3
+            rows = (n + cols - 1) // cols
+
+        fig, axes = plt.subplots(rows, cols, figsize=(6 * cols, 4 * rows))
         fig.patch.set_facecolor(self.COLORS["bg_dark"])
 
         if n == 1:
-            axes = [axes]
-        else:
-            axes = axes.flatten()
+            axes = np.array([axes])
+        axes = axes.flatten()
 
         for i, feat in enumerate(features):
             ax = axes[i]
             ax.set_facecolor(self.COLORS["bg_card"])
 
-            data_normal = df[df[target_col] == 0][feat].dropna()
-            data_anomaly = df[df[target_col] == 1][feat].dropna()
+            data_normal = df_clean.loc[df_clean[target_col] == 0, feat].dropna().values
+            data_anomaly = df_clean.loc[df_clean[target_col] == 1, feat].dropna().values
 
-            bp = ax.boxplot(
-                [data_normal, data_anomaly],
-                labels=["Normal", "Anomali"],
-                patch_artist=True,
-                boxprops={"facecolor": self.COLORS["accent"], "alpha": 0.6},
-                medianprops={"color": self.COLORS["secondary"], "linewidth": 2},
-                whiskerprops={"color": self.COLORS["text_muted"]},
-                capprops={"color": self.COLORS["text_muted"]},
-                flierprops={"markerfacecolor": self.COLORS["primary"], "markersize": 3},
-            )
-            bp["boxes"][1].set_facecolor(self.COLORS["primary"])
+            if len(data_normal) < 2 or len(data_anomaly) < 2:
+                ax.set_visible(False)
+                continue
 
-            ax.set_title(feat, color=self.COLORS["secondary"], fontsize=10, weight="bold")
+            x_min = min(data_normal.min(), data_anomaly.min())
+            x_max = max(data_normal.max(), data_anomaly.max())
+            x_grid = np.linspace(x_min, x_max, 250)
+
+            try:
+                kde_n = gaussian_kde(data_normal)
+                kde_a = gaussian_kde(data_anomaly)
+                y_n = kde_n(x_grid)
+                y_a = kde_a(x_grid)
+
+                ax.fill_between(x_grid, y_n, color=self.COLORS["accent"],
+                                alpha=0.45, label="Normal")
+                ax.fill_between(x_grid, y_a, color=self.COLORS["primary"],
+                                alpha=0.45, label="Anomali")
+                ax.plot(x_grid, y_n, color=self.COLORS["accent"], linewidth=1.5)
+                ax.plot(x_grid, y_a, color=self.COLORS["primary"], linewidth=1.5)
+            except Exception:
+                # KDE hata verirse histograma düş
+                ax.hist(data_normal, bins=30, alpha=0.5, color=self.COLORS["accent"],
+                        label="Normal", density=True)
+                ax.hist(data_anomaly, bins=30, alpha=0.5, color=self.COLORS["primary"],
+                        label="Anomali", density=True)
+
+            d_val = abs(self.compute_cohens_d(
+                pd.Series(data_anomaly), pd.Series(data_normal)
+            ))
+            ax.set_title(f"{feat}   (|d| = {d_val:.2f})",
+                         color=self.COLORS["secondary"], fontsize=11, weight="bold")
+            ax.set_xlabel(feat, color=self.COLORS["text"], fontsize=9)
+            ax.set_ylabel("Yoğunluk", color=self.COLORS["text"], fontsize=9)
             ax.tick_params(colors=self.COLORS["text"], labelsize=8)
+            ax.legend(fontsize=8, facecolor=self.COLORS["bg_card"],
+                      edgecolor="#333", labelcolor=self.COLORS["text"])
+            ax.grid(True, alpha=0.1)
+            ax.spines["top"].set_visible(False)
+            ax.spines["right"].set_visible(False)
+            ax.spines["left"].set_color(self.COLORS["text_muted"])
+            ax.spines["bottom"].set_color(self.COLORS["text_muted"])
+            ax.spines["left"].set_alpha(0.3)
+            ax.spines["bottom"].set_alpha(0.3)
+
+        # Boş axes
+        for j in range(n, len(axes)):
+            axes[j].set_visible(False)
+
+        fig.suptitle(
+            "En Ayırt Edici Özelliklerde Normal vs Anomali Dağılımı",
+            color=self.COLORS["secondary"], fontsize=14, weight="bold", y=1.00,
+        )
+        plt.tight_layout()
+        return fig
+
+    def plot_categorical_bias(
+        self,
+        df: pd.DataFrame,
+        cat_cols: list,
+        target_col: str = "anomaly_label",
+    ):
+        """Kategorik sütunlarda anomali oranı — bias kontrolü.
+
+        Her kategori için anomali oranı bar chart. Genel anomali oranı
+        baseline çizgisi olarak gösterilir. Sapma > 5 puansa kategori vurgulanır.
+        """
+        baseline = df[target_col].mean()
+        n = len(cat_cols)
+        if n == 0:
+            return None
+
+        cols = 4 if n >= 4 else n
+        rows = (n + cols - 1) // cols
+
+        fig, axes = plt.subplots(rows, cols, figsize=(5 * cols, 4 * rows))
+        fig.patch.set_facecolor(self.COLORS["bg_dark"])
+
+        if n == 1:
+            axes = np.array([axes])
+        axes = np.array(axes).flatten()
+
+        for i, col in enumerate(cat_cols):
+            ax = axes[i]
+            ax.set_facecolor(self.COLORS["bg_card"])
+
+            grp = df.groupby(col)[target_col].agg(["mean", "count"]).sort_values("mean")
+            categories = [str(c) for c in grp.index]
+            rates = grp["mean"].values
+            counts = grp["count"].values
+
+            # Renk: baseline'dan sapma
+            colors = []
+            for r in rates:
+                deviation = r - baseline
+                if deviation > 0.05:
+                    colors.append(self.COLORS["primary"])      # Yüksek anomali oranı
+                elif deviation < -0.05:
+                    colors.append(self.COLORS["accent"])       # Düşük anomali oranı
+                else:
+                    colors.append(self.COLORS["text_muted"])   # Baseline civarı
+
+            bars = ax.bar(range(len(categories)), rates, color=colors,
+                          edgecolor="white", linewidth=0.4, alpha=0.92)
+
+            # Baseline çizgisi
+            ax.axhline(y=baseline, color=self.COLORS["secondary"],
+                       linestyle="--", linewidth=1.5, alpha=0.85,
+                       label=f"Genel ort. ({baseline:.0%})")
+
+            # Bar üstü oran ve n
+            for bar, r, n_count in zip(bars, rates, counts):
+                ax.text(bar.get_x() + bar.get_width() / 2,
+                        bar.get_height() + 0.015,
+                        f"{r:.0%}",
+                        ha="center", va="bottom", fontsize=10, weight="bold",
+                        color=self.COLORS["text"])
+                ax.text(bar.get_x() + bar.get_width() / 2,
+                        bar.get_height() / 2,
+                        f"n={n_count:,}",
+                        ha="center", va="center", fontsize=8,
+                        color="white", alpha=0.7)
+
+            ax.set_xticks(range(len(categories)))
+            ax.set_xticklabels(categories, rotation=20, ha="right",
+                               fontsize=9, color=self.COLORS["text"])
+            ax.set_ylabel("Anomali Oranı", color=self.COLORS["text"], fontsize=9)
+            ax.set_ylim(0, max(max(rates) * 1.25, baseline * 1.4, 0.3))
+            ax.set_title(col, color=self.COLORS["secondary"],
+                         fontsize=11, weight="bold", pad=8)
+            ax.tick_params(colors=self.COLORS["text"], labelsize=8)
+            ax.legend(fontsize=7, loc="upper left",
+                      facecolor=self.COLORS["bg_card"], edgecolor="#333",
+                      labelcolor=self.COLORS["text"])
             ax.grid(True, axis="y", alpha=0.1)
             ax.spines["top"].set_visible(False)
             ax.spines["right"].set_visible(False)
@@ -366,10 +585,42 @@ class Visualizer:
             ax.spines["bottom"].set_alpha(0.3)
 
         # Boş axes'i gizle
-        for j in range(i + 1, len(axes)):
+        for j in range(n, len(axes)):
             axes[j].set_visible(False)
 
-        fig.suptitle("Normal vs Anomali Karşılaştırması",
-                      color=self.COLORS["secondary"], fontsize=14, weight="bold", y=1.02)
+        fig.suptitle(
+            "Kategorik Özelliklerde Anomali Oranı — Bias Kontrolü\n"
+            "Kırmızı: yüksek anomali  ·  Mavi: düşük anomali  ·  Gri: baseline civarı",
+            color=self.COLORS["secondary"], fontsize=13, weight="bold", y=1.00,
+        )
         plt.tight_layout()
         return fig
+
+    @staticmethod
+    def compute_categorical_bias_summary(
+        df: pd.DataFrame,
+        cat_cols: list,
+        target_col: str = "anomaly_label",
+    ) -> pd.DataFrame:
+        """Her kategorik sütun için max-min anomali oranı farkını hesapla.
+
+        Yüksek fark = bu kategorik sütun anomali ile güçlü bir ilişkiye sahip
+        (klinik anlamlı veya bias göstergesi olabilir).
+        """
+        rows = []
+        baseline = df[target_col].mean()
+        for col in cat_cols:
+            grp = df.groupby(col)[target_col].agg(["mean", "count"])
+            rate_max = grp["mean"].max()
+            rate_min = grp["mean"].min()
+            spread = rate_max - rate_min
+            top_cat = grp["mean"].idxmax()
+            bot_cat = grp["mean"].idxmin()
+            rows.append({
+                "Sütun": col,
+                "Yelpaze (max-min)": spread,
+                "En Yüksek": f"{top_cat} ({rate_max:.1%})",
+                "En Düşük": f"{bot_cat} ({rate_min:.1%})",
+                "Baseline": f"{baseline:.1%}",
+            })
+        return pd.DataFrame(rows).sort_values("Yelpaze (max-min)", ascending=False)

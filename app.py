@@ -407,49 +407,167 @@ def main():
     # ==================================================================
     with tab_eda:
         st.markdown("### 📊 Keşifsel Veri Analizi")
+        st.caption(
+            "Her grafik bir tasarım kararını kanıtlar. Özellikler kullanıcı tarafından "
+            "değil, **istatistiksel kriterlere göre veri tarafından** seçilmiştir."
+        )
 
         df_clean = loader.clean(raw_df.copy())
 
-        # Anomali dağılımı
-        st.markdown("#### 🎯 Anomali Dağılımı")
-        col_a, col_b = st.columns([1, 2])
-
-        with col_a:
-            fig_pie = viz.plot_class_distribution(raw_df["anomaly_label"])
-            st.pyplot(fig_pie)
-            plt.close()
-
-        with col_b:
-            fig_ct = viz.plot_cell_type_distribution(raw_df)
-            st.pyplot(fig_ct)
-            plt.close()
-
-        # Box plot karşılaştırması
-        st.markdown("#### 📦 Normal vs Anomali Karşılaştırması")
-        num_cols = df_clean.select_dtypes(include=["number"]).columns.drop("anomaly_label").tolist()
-
-        default_box_feats = num_cols[:6] if len(num_cols) >= 6 else num_cols
-        selected_box_feats = st.multiselect(
-            "Özellik Seçin (Box Plot):", num_cols,
-            default=default_box_feats, key="box_feats",
+        # ----- GRAFİK 1: Leakage Kanıtı -----
+        st.markdown("#### 1️⃣ Veri Sızıntısı (Data Leakage) Kanıtı")
+        st.markdown(
+            "**Soru:** Hangi sütunları neden modelden çıkardık?  \n"
+            "**Yöntem:** Tüm sayısal sütunların `anomaly_label` ile mutlak Pearson korelasyonu."
         )
-        if selected_box_feats:
-            fig_box = viz.plot_box_anomaly_comparison(df_clean, selected_box_feats)
-            st.pyplot(fig_box)
+        leakage_all = loader.leakage_cols + loader.id_cols
+        fig_leak = viz.plot_leakage_evidence(
+            raw_df, target_col="anomaly_label", leakage_cols=leakage_all,
+        )
+        st.pyplot(fig_leak)
+        plt.close()
+        st.info(
+            "**Yorum:** `cytodiffusion_anomaly_score` ve `labeller_confidence_score` "
+            "hedef değişkenle çok yüksek korelasyona sahip — bunlar başka bir modelin/uzmanın "
+            "etiketleme sürecinden gelen bilgilerdir. Modele dahil edilseydi gerçek genelleme "
+            "değil **leakage** ölçerdik. Bu yüzden eğitime alınmadılar."
+        )
+
+        st.markdown("---")
+
+        # ----- GRAFİK 2: Sınıf Dengesizliği -----
+        st.markdown("#### 2️⃣ Sınıf Dengesizliği")
+        st.markdown(
+            "**Soru:** Veri ne kadar dengesiz? Bu, tasarım seçimlerini nasıl etkiliyor?"
+        )
+        col_donut, col_text = st.columns([1.2, 1])
+        with col_donut:
+            fig_donut = viz.plot_class_imbalance_donut(raw_df["anomaly_label"])
+            st.pyplot(fig_donut)
             plt.close()
+        with col_text:
+            anomaly_pct = raw_df["anomaly_label"].mean() * 100
+            st.markdown(
+                f"**Anomali oranı: %{anomaly_pct:.1f}**  \n\n"
+                "**Tasarım kararları:**  \n"
+                "🔹 **`stratify=y`** — Train/test split sınıf oranını koruyacak şekilde yapılır.  \n"
+                "🔹 **F1-Score** birincil metrik — Accuracy dengesiz veride yanıltıcıdır.  \n"
+                "🔹 **SMOTE opsiyonel** — Azınlık sınıfı için sentetik örnekleme (sidebar'dan açılabilir).  \n"
+                "🔹 **Class-balanced metrikler** — Balanced Accuracy, MCC, Cohen's Kappa raporlanır."
+            )
 
-        # Histogram
-        st.markdown("#### 📈 Sayısal Özellik Dağılımları")
-        selected_feat = st.selectbox("Özellik Seçin:", num_cols, index=0)
-        fig_hist = viz.plot_feature_histogram(df_clean, selected_feat)
-        st.pyplot(fig_hist)
-        plt.close()
+        st.markdown("---")
 
-        # Korelasyon matrisi
-        st.markdown("#### 🔗 Korelasyon Matrisi")
-        fig_corr = viz.plot_correlation_matrix(df_clean)
-        st.pyplot(fig_corr)
+        # ----- GRAFİK 3: Cohen's d ile Top Özellikler -----
+        st.markdown("#### 3️⃣ En Ayırt Edici Özellikler — Cohen's d Etki Büyüklüğü")
+        st.markdown(
+            "**Soru:** Hangi özellikler Normal ile Anomali arasında en güçlü farkı yaratıyor?  \n"
+            "**Yöntem:** Her sayısal özellik için iki sınıfın ortalamaları arasındaki "
+            "**standardize edilmiş farkı** (Cohen's d) hesapladık. "
+            "Eşikler: 0.2 küçük · 0.5 orta · 0.8 büyük etki."
+        )
+        fig_cohen, top_features = viz.plot_cohens_d_top_features(
+            df_clean, target_col="anomaly_label", top_n=10,
+        )
+        st.pyplot(fig_cohen)
         plt.close()
+        if top_features:
+            top_3_str = ", ".join(f"`{f}`" for f in top_features[:3])
+            st.info(
+                f"**Yorum:** En güçlü ayrım sinyalleri {top_3_str} özelliklerinden geliyor. "
+                "Bu liste subjektif değil — tüm sayısal özellikler tarandı, etki büyüklüğüne göre "
+                "otomatik sıralandı. Modelin hangi sinyallerden öğrendiğini istatistiksel olarak öngörüyoruz."
+            )
+
+        st.markdown("---")
+
+        # ----- GRAFİK 4: Top 4 Özellik için KDE Dağılımı -----
+        st.markdown("#### 4️⃣ Top 4 Özelliğin Sınıf Bazlı Yoğunluk Dağılımı")
+        st.markdown(
+            "**Soru:** Cohen's d'ye göre seçilen top özelliklerde sınıflar gerçekten ayrışıyor mu?  \n"
+            "**Yöntem:** Yukarıdaki listenin **ilk 4 özelliği** için KDE (yoğunluk eğrisi). "
+            "İki dağılım ne kadar az örtüşüyorsa, model o özellikten o kadar bilgi çıkarabilir."
+        )
+        top_4 = top_features[:4] if top_features else []
+        if top_4:
+            fig_kde = viz.plot_top_features_kde(
+                df_clean, features=top_4, target_col="anomaly_label",
+            )
+            if fig_kde is not None:
+                st.pyplot(fig_kde)
+                plt.close()
+            st.success(
+                "**Yorum:** Mavi (Normal) ve kırmızı (Anomali) yoğunlukları belirgin biçimde "
+                "kayık → klasik ML algoritmaları (XGBoost, RF, LightGBM) bu özelliklerdeki "
+                "eşikleri öğrenerek başarılı sınıflandırma yapabilir. Tam örtüşme olsaydı "
+                "model bu özellikten faydalanamazdı."
+            )
+
+        st.markdown("---")
+
+        # ----- GRAFİK 5: Kategorik Bias Kontrolü -----
+        st.markdown("#### 5️⃣ Kategorik Özelliklerde Anomali Oranı — Bias Kontrolü")
+        st.markdown(
+            "**Soru:** Anomaliler bazı klinik gruplara veya teknik koşullara göre yoğunlaşıyor mu?  \n"
+            "**Yöntem:** Her kategorik sütun için kategori bazında anomali oranını "
+            "**genel baseline** ile karşılaştırdık. Sapma > %5 ise renkli işaretlendi."
+        )
+        # Kategorik sütunlar — leakage olanlar zaten df_clean'de yok
+        cat_candidates = [
+            "patient_age_group", "patient_sex",
+            "dataset_source", "staining_protocol",
+            "microscope_model", "magnification_x", "image_resolution_px",
+        ]
+        cat_cols_present = [c for c in cat_candidates if c in df_clean.columns]
+        if cat_cols_present:
+            # Bias özet tablosu
+            bias_df = viz.compute_categorical_bias_summary(
+                df_clean, cat_cols_present, target_col="anomaly_label",
+            )
+            st.markdown("**📋 Bias Özeti (yelpaze = max kategori − min kategori anomali oranı)**")
+            st.dataframe(
+                bias_df.style.format({"Yelpaze (max-min)": "{:.1%}"}),
+                width="stretch", hide_index=True,
+            )
+
+            # Grafik
+            fig_bias = viz.plot_categorical_bias(
+                df_clean, cat_cols_present, target_col="anomaly_label",
+            )
+            if fig_bias is not None:
+                st.pyplot(fig_bias)
+                plt.close()
+
+            # Otomatik yorum: en yüksek yelpazeli sütun
+            top_bias = bias_df.iloc[0]
+            top_col = top_bias["Sütun"]
+            top_spread = top_bias["Yelpaze (max-min)"]
+
+            if top_spread < 0.05:
+                interpretation = (
+                    f"**Yorum:** Hiçbir kategorik sütunda anomali oranı belirgin sapma "
+                    f"göstermiyor (en yüksek yelpaze: `{top_col}`, %{top_spread:.1%}). "
+                    "→ **İyi haber:** Klinik veya teknik bias yok, model genelleyebilir."
+                )
+            else:
+                interpretation = (
+                    f"**Yorum:** En yüksek sapma `{top_col}` sütununda "
+                    f"(%{top_spread:.1%} yelpaze) — yani bu kategorik sütunun "
+                    f"alt grupları arasında anomali oranı belirgin biçimde değişiyor. "
+                )
+                # Klinik mi teknik mi yorumla
+                if top_col in ("patient_age_group", "patient_sex"):
+                    interpretation += (
+                        "Bu **klinik anlamlı** bir sinyal olabilir (örn. yaşlılarda hematolojik "
+                        "hastalık daha yaygındır). Modelin yakaladığı sinyal tıbbi gerçeklikle uyumlu."
+                    )
+                else:
+                    interpretation += (
+                        "Bu **teknik bir bias** olabilir (örn. bir veri kaynağında anomali "
+                        "örneklerinin daha fazla toplanmış olması — batch effect). "
+                        "Model bu sütunu sinyal olarak kullanabilir, dikkat edilmeli."
+                    )
+            st.info(interpretation)
 
     # ==================================================================
     # TAB 3 — EĞİTİM
