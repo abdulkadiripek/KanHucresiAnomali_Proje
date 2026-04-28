@@ -1,238 +1,211 @@
 """
 =============================================================================
-Blood Cell Anomaly Detection — Klasik Makine Öğrenmesi ile Anomali Tespiti
+Blood Cell Anomaly Detection — CLI Script (Modüler)
 =============================================================================
-Bu script, kan hücresi veri setindeki anomalileri tespit etmek için
-XGBoost, Random Forest ve LightGBM algoritmalarını kullanır.
+Kan hücresi veri setindeki anomalileri tespit etmek için klasik ML
+algoritmalarını kullanan bağımsız CLI scripti.
 
-NOT: Derin öğrenme (Neural Network, PyTorch, TensorFlow vb.) KULLANILMAMISTIR.
-     Sadece klasik ML algoritmaları kullanılmıştır.
+Derin öğrenme KULLANILMAMISTIR. Sadece klasik ML algoritmaları.
+
+Kullanım:
+    python anomaly_detection.py
+
+Modüler core/ paketi kullanır:
+    - DataLoader  : Veri yükleme ve temizleme
+    - Preprocessor: Encoding, scaling, split, SMOTE
+    - ModelFactory: Model oluşturma ve eğitim
+    - Evaluator   : Metrik hesaplama ve raporlama
 =============================================================================
 """
 
 import os
+import sys
 import warnings
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib
 import seaborn as sns
 
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import (
-    accuracy_score,
-    precision_score,
-    recall_score,
-    f1_score,
-    confusion_matrix,
-    classification_report,
-)
-from sklearn.ensemble import RandomForestClassifier
-from xgboost import XGBClassifier
-from lightgbm import LGBMClassifier
+# Core modüller
+from core import DataLoader, Preprocessor, ModelFactory, Evaluator
 
-# Gereksiz uyarıları bastır
 warnings.filterwarnings("ignore")
-
-# Matplotlib Türkçe karakter desteği ve genel stil ayarları
+matplotlib.use("Agg")
 plt.rcParams["figure.dpi"] = 150
 sns.set_theme(style="whitegrid", font_scale=1.1)
 
-# ============================================================================
-# 1. VERİ YÜKLEME VE TEMİZLEME
-# ============================================================================
-print("=" * 70)
-print("ADIM 1: Veri Yükleme ve Temizleme")
-print("=" * 70)
-
-# CSV dosyasını oku
-DATA_PATH = os.path.join(os.path.dirname(__file__), "archive", "blood_cell_anomaly_detection.csv")
-df = pd.read_csv(DATA_PATH)
-print(f"Orijinal veri seti boyutu: {df.shape[0]} satır, {df.shape[1]} sütun")
-
-# Hedef değişken bilgisi
-print(f"\nHedef değişken (anomaly_label) dağılımı:")
-print(df["anomaly_label"].value_counts().to_string())
-print(f"Anomali oranı: {df['anomaly_label'].mean():.2%}")
-
-# --- cell_id sütununu kaldır (modellemeye katkısı yok) ---
-df.drop(columns=["cell_id"], inplace=True)
-print("\n✓ 'cell_id' sütunu kaldırıldı.")
-
-# --- Data Leakage'a neden olacak sütunları kaldır ---
-leakage_columns = [
-    "disease_category",
-    "cell_type",
-    "cytodiffusion_anomaly_score",
-    "cytodiffusion_classification_confidence",
-    "labeller_confidence_score",
-]
-df.drop(columns=leakage_columns, inplace=True)
-print(f"✓ Data Leakage sütunları kaldırıldı: {leakage_columns}")
-print(f"Temizlenmiş veri seti boyutu: {df.shape[0]} satır, {df.shape[1]} sütun")
 
 # ============================================================================
-# 2. VERİ ÖN İŞLEME (PREPROCESSING)
+# KONFIGÜRASYON
 # ============================================================================
-print("\n" + "=" * 70)
-print("ADIM 2: Veri Ön İşleme (Preprocessing)")
-print("=" * 70)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, "archive")
+OUTPUT_DIR = os.path.join(BASE_DIR, "output")
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# Hedef (y) ve özellik matrisini (X) ayır
-y = df["anomaly_label"]
-X = df.drop(columns=["anomaly_label"])
 
-# --- Kategorik ve sayısal sütunları tespit et ---
-categorical_cols = X.select_dtypes(include=["object"]).columns.tolist()
-numerical_cols = X.select_dtypes(include=["number"]).columns.tolist()
+def main():
+    """Ana çalıştırma fonksiyonu."""
 
-print(f"\nKategorik sütunlar ({len(categorical_cols)}): {categorical_cols}")
-print(f"Sayısal sütunlar   ({len(numerical_cols)}): {numerical_cols}")
+    # ================================================================
+    # ADIM 1: Veri Yükleme ve Temizleme
+    # ================================================================
+    print("=" * 70)
+    print("ADIM 1: Veri Yükleme ve Temizleme")
+    print("=" * 70)
 
-# --- One-Hot Encoding (kategorik sütunlar) ---
-X = pd.get_dummies(X, columns=categorical_cols, drop_first=True)
-print(f"\n✓ One-Hot Encoding uygulandı.")
-print(f"  Yeni özellik sayısı: {X.shape[1]}")
+    loader = DataLoader(data_dir=DATA_DIR)
+    raw_df = loader.load()
+    summary = loader.get_summary(raw_df)
 
-# --- Train / Test Split (%80 / %20, stratified) ---
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.20, random_state=42, stratify=y
-)
-print(f"\n✓ Veri bölündü: Train={X_train.shape[0]}, Test={X_test.shape[0]}")
+    print(f"Orijinal veri seti: {summary['n_rows']} satır, {summary['n_cols']} sütun")
+    print(f"Anomali oranı: {summary['anomaly_ratio']:.2%}")
+    print(f"Eksik değer: {summary['missing_values']}")
 
-# --- StandardScaler (sadece sayısal sütunlara uygula) ---
-# Not: Scaler sadece train üzerinde fit edilir, test'e ayrıca transform uygulanır.
-scaler = StandardScaler()
-X_train[numerical_cols] = scaler.fit_transform(X_train[numerical_cols])
-X_test[numerical_cols] = scaler.transform(X_test[numerical_cols])
-print("✓ StandardScaler ile sayısal özellikler ölçeklendi (fit: train, transform: test).")
+    df_clean = loader.clean(raw_df)
+    print(f"\n✓ Temizlenmiş veri seti: {df_clean.shape[0]} satır, {df_clean.shape[1]} sütun")
 
-# ============================================================================
-# 3. MODEL EĞİTİMİ (3 Klasik ML Algoritması)
-# ============================================================================
-print("\n" + "=" * 70)
-print("ADIM 3: Model Eğitimi")
-print("=" * 70)
+    # ================================================================
+    # ADIM 2: Veri Ön İşleme
+    # ================================================================
+    print(f"\n{'=' * 70}")
+    print("ADIM 2: Veri Ön İşleme (Preprocessing)")
+    print("=" * 70)
 
-# Modelleri tanımla
-models = {
-    "XGBoost": XGBClassifier(
-        n_estimators=300,
-        max_depth=6,
-        learning_rate=0.1,
-        subsample=0.8,
-        colsample_bytree=0.8,
-        eval_metric="logloss",
-        random_state=42,
-        verbosity=0,
-    ),
-    "Random Forest": RandomForestClassifier(
-        n_estimators=300,
-        max_depth=None,
-        min_samples_split=5,
-        min_samples_leaf=2,
-        random_state=42,
-        n_jobs=-1,
-    ),
-    "LightGBM": LGBMClassifier(
-        n_estimators=300,
-        max_depth=-1,
-        learning_rate=0.1,
-        subsample=0.8,
-        colsample_bytree=0.8,
-        random_state=42,
-        verbose=-1,
-    ),
-}
+    preprocessor = Preprocessor(test_size=0.20, apply_smote=False)
+    split = preprocessor.process(df_clean)
 
-# Her modeli eğit ve sonuçları sakla
-results = {}
-predictions = {}
+    print(f"Kategorik sütunlar: {split.categorical_cols}")
+    print(f"Sayısal sütunlar: {split.numerical_cols}")
+    print(f"\n✓ Train: {split.X_train.shape[0]} satır, Test: {split.X_test.shape[0]} satır")
+    print(f"✓ Özellik sayısı: {split.X_train.shape[1]}")
 
-for name, model in models.items():
-    print(f"\n>>> {name} eğitiliyor...")
-    model.fit(X_train, y_train)
-    y_pred = model.predict(X_test)
+    # ================================================================
+    # ADIM 3: Model Eğitimi (Cross-Validation ile)
+    # ================================================================
+    print(f"\n{'=' * 70}")
+    print("ADIM 3: Model Eğitimi (5-Fold Cross-Validation)")
+    print("=" * 70)
 
-    acc = accuracy_score(y_test, y_pred)
-    prec = precision_score(y_test, y_pred, zero_division=0)
-    rec = recall_score(y_test, y_pred, zero_division=0)
-    f1 = f1_score(y_test, y_pred, zero_division=0)
+    factory = ModelFactory(n_cv_folds=5)
+    evaluator = Evaluator()
 
-    results[name] = {
-        "Accuracy": acc,
-        "Precision": prec,
-        "Recall": rec,
-        "F1-Score": f1,
-    }
-    predictions[name] = y_pred
-    print(f"    ✓ {name} eğitimi tamamlandı.")
+    model_names = ["XGBoost", "Random Forest", "LightGBM"]
+    train_results = {}
 
-# ============================================================================
-# 4. DEĞERLENDİRME (EVALUATION)
-# ============================================================================
-print("\n" + "=" * 70)
-print("ADIM 4: Değerlendirme (Evaluation)")
-print("=" * 70)
+    for name in model_names:
+        print(f"\n>>> {name} eğitiliyor...")
+        model = factory.create_model(name)
+        result = factory.train(
+            name, model,
+            split.X_train, split.y_train,
+            split.X_test, split.y_test,
+            run_cv=True,
+        )
+        train_results[name] = result
 
-# --- Her model için metrikleri ekrana yazdır ---
-for name, metrics in results.items():
-    print(f"\n{'─' * 50}")
-    print(f"  Model: {name}")
-    print(f"{'─' * 50}")
-    print(f"  Accuracy  : {metrics['Accuracy']:.4f}")
-    print(f"  Precision : {metrics['Precision']:.4f}")
-    print(f"  Recall    : {metrics['Recall']:.4f}")
-    print(f"  F1-Score  : {metrics['F1-Score']:.4f}")
+        evaluator.evaluate(
+            model_name=name,
+            y_true=split.y_test,
+            y_pred=result.y_pred,
+            y_proba=result.y_proba,
+            cv_mean=result.cv_mean,
+            cv_std=result.cv_std,
+        )
+        print(f"    ✓ {name} eğitimi tamamlandı.")
+        if result.cv_mean is not None:
+            print(f"    CV F1-Score: {result.cv_mean:.4f} ± {result.cv_std:.4f}")
 
-# --- Karşılaştırma tablosu ---
-print(f"\n{'=' * 70}")
-print("MODEL KARŞILAŞTIRMA TABLOSU")
-print(f"{'=' * 70}")
+    # ================================================================
+    # ADIM 4: Değerlendirme
+    # ================================================================
+    print(f"\n{'=' * 70}")
+    print("ADIM 4: Değerlendirme")
+    print("=" * 70)
 
-comparison_df = pd.DataFrame(results).T
-comparison_df = comparison_df.sort_values("F1-Score", ascending=False)
-print(comparison_df.to_string(float_format="{:.4f}".format))
+    for name, eval_res in evaluator.results.items():
+        print(f"\n{'─' * 55}")
+        print(f"  Model: {name}")
+        print(f"{'─' * 55}")
+        print(f"  Accuracy        : {eval_res.accuracy:.4f}")
+        print(f"  Balanced Acc.   : {eval_res.balanced_accuracy:.4f}")
+        print(f"  Precision       : {eval_res.precision:.4f}")
+        print(f"  Recall          : {eval_res.recall:.4f}")
+        print(f"  F1-Score        : {eval_res.f1:.4f}")
+        print(f"  MCC             : {eval_res.mcc:.4f}")
+        print(f"  Cohen's Kappa   : {eval_res.kappa:.4f}")
+        if eval_res.roc_auc is not None:
+            print(f"  ROC-AUC         : {eval_res.roc_auc:.4f}")
+        if eval_res.pr_auc is not None:
+            print(f"  PR-AUC          : {eval_res.pr_auc:.4f}")
 
-# --- En iyi modeli belirle (F1-Score'a göre) ---
-best_model_name = comparison_df.index[0]
-best_f1 = comparison_df.loc[best_model_name, "F1-Score"]
-print(f"\n🏆 En iyi model: {best_model_name} (F1-Score: {best_f1:.4f})")
+    # Karşılaştırma tablosu
+    print(f"\n{'=' * 70}")
+    print("MODEL KARŞILAŞTIRMA TABLOSU")
+    print("=" * 70)
 
-# --- En iyi modelin Confusion Matrix'ini çizdir ---
-cm = confusion_matrix(y_test, predictions[best_model_name])
+    comp_df = evaluator.get_comparison_table()
+    print(comp_df.to_string(float_format="{:.4f}".format))
 
-fig, ax = plt.subplots(figsize=(8, 6))
-sns.heatmap(
-    cm,
-    annot=True,
-    fmt="d",
-    cmap="Blues",
-    xticklabels=["Normal (0)", "Anomaly (1)"],
-    yticklabels=["Normal (0)", "Anomaly (1)"],
-    linewidths=1,
-    linecolor="white",
-    annot_kws={"size": 16, "weight": "bold"},
-    ax=ax,
-)
-ax.set_xlabel("Tahmin Edilen (Predicted)", fontsize=13)
-ax.set_ylabel("Gerçek (Actual)", fontsize=13)
-ax.set_title(f"Confusion Matrix — {best_model_name}\n(F1-Score: {best_f1:.4f})", fontsize=14, weight="bold")
-plt.tight_layout()
+    # En iyi model
+    best_name = evaluator.get_best_model("F1-Score")
+    best_eval = evaluator.results[best_name]
+    print(f"\n🏆 En iyi model: {best_name} (F1-Score: {best_eval.f1:.4f})")
 
-# Confusion Matrix'i kaydet
-output_path = os.path.join(os.path.dirname(__file__), "confusion_matrix.png")
-fig.savefig(output_path, dpi=200, bbox_inches="tight")
-print(f"\n✓ Confusion Matrix kaydedildi: {output_path}")
-plt.show()
+    # Classification report
+    print(f"\n{'=' * 70}")
+    print(f"SINIFLANDIRMA RAPORU — {best_name}")
+    print("=" * 70)
+    print(best_eval.classification_rep)
 
-# --- Özet ---
-print(f"\n{'=' * 70}")
-print("SONUÇ ÖZETİ")
-print(f"{'=' * 70}")
-print(f"Toplam {len(models)} klasik ML modeli eğitildi ve test seti üzerinde değerlendirildi.")
-print(f"En yüksek F1-Score'a sahip model: {best_model_name} ({best_f1:.4f})")
-print(f"Tüm modeller sadece hücrenin fiziksel/kimyasal özellikleri üzerinden")
-print(f"anomali tespiti yapmıştır. Data Leakage önlenmiştir.")
-print(f"Hiçbir derin öğrenme yöntemi kullanılmamıştır.")
-print("=" * 70)
+    # ================================================================
+    # ADIM 5: Confusion Matrix Kaydet
+    # ================================================================
+    from sklearn.metrics import confusion_matrix
+    cm = confusion_matrix(split.y_test, train_results[best_name].y_pred)
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+    sns.heatmap(
+        cm, annot=True, fmt="d", cmap="Blues",
+        xticklabels=["Normal (0)", "Anomaly (1)"],
+        yticklabels=["Normal (0)", "Anomaly (1)"],
+        linewidths=1, linecolor="white",
+        annot_kws={"size": 16, "weight": "bold"},
+        ax=ax,
+    )
+    ax.set_xlabel("Tahmin Edilen (Predicted)", fontsize=13)
+    ax.set_ylabel("Gerçek (Actual)", fontsize=13)
+    ax.set_title(
+        f"Confusion Matrix — {best_name}\n(F1-Score: {best_eval.f1:.4f})",
+        fontsize=14, weight="bold",
+    )
+    plt.tight_layout()
+
+    cm_path = os.path.join(OUTPUT_DIR, "confusion_matrix.png")
+    fig.savefig(cm_path, dpi=200, bbox_inches="tight")
+    plt.close()
+    print(f"\n✓ Confusion Matrix kaydedildi: {cm_path}")
+
+    # ================================================================
+    # Model kaydet
+    # ================================================================
+    model_path = os.path.join(OUTPUT_DIR, f"{best_name.lower().replace(' ', '_')}_best.joblib")
+    ModelFactory.save_model(train_results[best_name].model, model_path)
+    print(f"✓ En iyi model kaydedildi: {model_path}")
+
+    # ================================================================
+    # SONUÇ
+    # ================================================================
+    print(f"\n{'=' * 70}")
+    print("SONUÇ ÖZETİ")
+    print("=" * 70)
+    print(f"Toplam {len(model_names)} klasik ML modeli eğitildi.")
+    print(f"5-Fold StratifiedKFold Cross-Validation uygulandı.")
+    print(f"En yüksek F1-Score: {best_name} ({best_eval.f1:.4f})")
+    print(f"Hiçbir derin öğrenme yöntemi kullanılmamıştır.")
+    print("=" * 70)
+
+
+if __name__ == "__main__":
+    main()
