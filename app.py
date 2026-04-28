@@ -39,6 +39,7 @@ matplotlib.use("Agg")
 # ============================================================================
 st.set_page_config(
     page_title="Kan Hücresi Anomali Tespiti",
+    page_icon="🧬",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -48,107 +49,136 @@ st.set_page_config(
 # ============================================================================
 st.markdown("""
 <style>
-    /* ========== ULTRA MODERN APPLE-INSPIRED THEME ========== */
+    /* ========== PREMIUM GLASS & NEON DASHBOARD THEME ========== */
+    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
     
     html, body, [class*="css"] {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-        -webkit-font-smoothing: antialiased;
+        font-family: 'Outfit', sans-serif;
     }
     
-    /* Clean flat background */
+    /* Deep premium background */
     .stApp {
-        background-color: #000000;
+        background: linear-gradient(145deg, #0f172a 0%, #020617 100%);
     }
     
     .block-container {
-        padding-top: 3rem !important;
-        max-width: 1000px; /* narrowed focus */
+        padding-top: 2rem !important;
+        max-width: 1300px; 
     }
 
-    /* Minimalist crisp headers */
+    /* Vibrant Crisp Headers */
     h1 {
         font-weight: 700 !important;
-        letter-spacing: -0.04em;
-        color: #FFFFFF !important;
-        font-size: 2.2rem !important;
+        background: linear-gradient(135deg, #38bdf8, #818cf8);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        font-size: 2.8rem !important;
+        letter-spacing: -0.5px;
     }
     
-    h2, h3 {
-        color: #F5F5F7 !important;
+    h2 {
+        color: #f8fafc !important;
         font-weight: 600 !important;
-        letter-spacing: -0.02em;
+        border-bottom: 2px solid rgba(56, 189, 248, 0.2);
+        padding-bottom: 8px;
     }
 
     h3 {
-        font-size: 1.1rem !important;
-        color: #86868B !important; /* Neutral grey */
-        margin-top: 2rem !important;
-    }
-
-    p, span, div {
-        color: #A1A1A6;
+        color: #94a3b8 !important;
+        font-weight: 500 !important;
     }
     
-    /* Metric styling */
+    /* Sexy Metric Cards */
+    div[data-testid="stMetric"] {
+        background: rgba(30, 41, 59, 0.7);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 16px;
+        padding: 20px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        transition: all 0.3s ease;
+    }
+    div[data-testid="stMetric"]:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 30px rgba(56, 189, 248, 0.15);
+        border-color: rgba(56, 189, 248, 0.3);
+    }
     div[data-testid="stMetricValue"] {
-        font-weight: 500 !important;
-        font-size: 2.5rem !important;
-        color: #FFFFFF !important; 
-        letter-spacing: -0.03em;
+        font-weight: 700 !important;
+        font-size: 2.2rem !important;
+        background: linear-gradient(to right, #38bdf8, #c084fc);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
     }
-    
     div[data-testid="stMetricLabel"] {
-        color: #86868B !important;
-        font-size: 0.85rem !important;
-        font-weight: 400 !important;
+        color: #94a3b8 !important;
+        font-weight: 500 !important;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        font-size: 0.8rem !important;
     }
     
-    /* Button flattening - iOS style */
+    /* Glowing Buttons */
     .stButton > button {
-        border-radius: 980px !important; /* Pill shape */
-        font-weight: 500 !important;
-        transition: all 0.2s ease !important;
-        letter-spacing: -0.01em !important;
-        font-size: 0.95rem !important;
+        border-radius: 12px !important;
+        font-weight: 600 !important;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        letter-spacing: 0.5px;
+        border: 1px solid rgba(255,255,255,0.1) !important;
     }
     .stButton > button[data-testid="baseButton-primary"] {
-        background-color: #FFFFFF !important;
-        color: #000000 !important;
+        background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%) !important;
+        color: white !important;
         border: none !important;
-        padding: 0.5rem 1.5rem !important;
+        box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4) !important;
     }
     .stButton > button[data-testid="baseButton-primary"]:hover {
-        background-color: #E5E5EA !important;
-        color: #000000 !important;
+        transform: translateY(-2px) scale(1.02);
+        box-shadow: 0 8px 25px rgba(139, 92, 246, 0.6) !important;
     }
     
-    /* Sidebar */
+    /* Sidebar styling */
     section[data-testid="stSidebar"] {
-        background-color: #1c1c1e !important;
-        border-right: 1px solid #38383a;
+        background: rgba(15, 23, 42, 0.95) !important;
+        backdrop-filter: blur(20px);
+        border-right: 1px solid rgba(255, 255, 255, 0.05);
     }
     
     /* Input widgets styling */
     .stSelectbox [data-baseweb="select"] > div,
     .stMultiSelect [data-baseweb="select"] > div {
-        background-color: #2c2c2e !important;
-        border: 1px solid #38383a !important;
-        border-radius: 12px !important;
+        background-color: rgba(30, 41, 59, 0.8) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        border-radius: 10px !important;
+        color: white !important;
     }
     
     /* Tabs minimalism */
+    .stTabs [data-baseweb="tab-list"] {
+        background: rgba(30, 41, 59, 0.5);
+        border-radius: 12px;
+        padding: 5px;
+    }
     .stTabs [data-baseweb="tab"] {
-        font-size: 0.9rem;
-        color: #86868B;
-        padding-top: 0.8rem;
-        padding-bottom: 0.8rem;
-    }
-    
-    .stTabs [aria-selected="true"] {
-        color: #FFFFFF !important;
+        font-size: 0.95rem;
+        color: #94a3b8;
         font-weight: 500;
+        border-radius: 8px;
+        transition: all 0.2s ease;
+    }
+    .stTabs [aria-selected="true"] {
+        background: linear-gradient(135deg, #38bdf8, #3b82f6) !important;
+        color: white !important;
+        box-shadow: 0 2px 10px rgba(56, 189, 248, 0.3);
     }
     
+    /* Dataframes */
+    .stDataFrame {
+        border: 1px solid rgba(255,255,255,0.05);
+        border-radius: 12px;
+        overflow: hidden;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -183,11 +213,11 @@ def main():
     # SIDEBAR
     # ------------------------------------------------------------------
     with st.sidebar:
-        st.markdown("## Kontrol Paneli")
+        st.markdown("## 🎛️ Kontrol Paneli")
         st.markdown("---")
 
         # Veri ayarları
-        st.markdown("### Veri Ayarları")
+        st.markdown("### 📊 Veri Ayarları")
         test_size = st.slider(
             "Test Seti Oranı (%)", 10, 40, 20, 5,
             help="Verinin yüzde kaçı test için ayrılsın?",
@@ -202,7 +232,7 @@ def main():
         st.markdown("---")
 
         # Model seçimi
-        st.markdown("### Model Seçimi")
+        st.markdown("### 🤖 Model Seçimi")
         selected_models = st.multiselect(
             "Eğitilecek Modeller",
             ALL_MODELS,
@@ -213,7 +243,7 @@ def main():
         st.markdown("---")
 
         # Eğitim modu
-        st.markdown("### Eğitim Modu")
+        st.markdown("### 🎯 Eğitim Modu")
         training_mode = st.radio(
             "Mod Seçin",
             ["Manuel Parametreler", "Otomatik Tuning (RandomizedSearchCV)"],
@@ -232,10 +262,10 @@ def main():
         # Hiperparametre ayarları (sadece manuel modda)
         model_params = {}
         if training_mode == "Manuel Parametreler":
-            st.markdown("### Hiperparametreler")
+            st.markdown("### ⚙️ Hiperparametreler")
 
             if "XGBoost" in selected_models:
-                with st.expander("XGBoost", expanded=False):
+                with st.expander("🔷 XGBoost", expanded=False):
                     model_params["XGBoost"] = {
                         "n_estimators": st.slider("n_estimators", 50, 1000, 300, 50, key="xgb_n"),
                         "max_depth": st.slider("max_depth", 2, 15, 6, 1, key="xgb_d"),
@@ -245,7 +275,7 @@ def main():
                     }
 
             if "LightGBM" in selected_models:
-                with st.expander("LightGBM", expanded=False):
+                with st.expander("💡 LightGBM", expanded=False):
                     model_params["LightGBM"] = {
                         "n_estimators": st.slider("n_estimators", 50, 1000, 300, 50, key="lgb_n"),
                         "max_depth": st.slider("max_depth (0=Auto)", 0, 15, 0, 1, key="lgb_d"),
@@ -258,7 +288,7 @@ def main():
                         model_params["LightGBM"]["max_depth"] = -1
 
             if "Random Forest" in selected_models:
-                with st.expander("Random Forest", expanded=False):
+                with st.expander("🌲 Random Forest", expanded=False):
                     model_params["Random Forest"] = {
                         "n_estimators": st.slider("n_estimators", 50, 1000, 300, 50, key="rf_n"),
                         "max_depth": st.slider("max_depth (0=None)", 0, 30, 0, 1, key="rf_d"),
@@ -269,7 +299,7 @@ def main():
                         model_params["Random Forest"]["max_depth"] = None
 
             if "Extra Trees" in selected_models:
-                with st.expander("Extra Trees", expanded=False):
+                with st.expander("🌳 Extra Trees", expanded=False):
                     model_params["Extra Trees"] = {
                         "n_estimators": st.slider("n_estimators", 50, 1000, 300, 50, key="et_n"),
                         "max_depth": st.slider("max_depth (0=None)", 0, 30, 0, 1, key="et_d"),
@@ -280,7 +310,7 @@ def main():
                         model_params["Extra Trees"]["max_depth"] = None
 
             if "Gradient Boosting" in selected_models:
-                with st.expander("Gradient Boosting", expanded=False):
+                with st.expander("📈 Gradient Boosting", expanded=False):
                     model_params["Gradient Boosting"] = {
                         "n_estimators": st.slider("n_estimators", 50, 500, 200, 50, key="gb_n"),
                         "max_depth": st.slider("max_depth", 2, 10, 5, 1, key="gb_d"),
@@ -289,7 +319,7 @@ def main():
                     }
 
             if "AdaBoost" in selected_models:
-                with st.expander("AdaBoost", expanded=False):
+                with st.expander("⚡ AdaBoost", expanded=False):
                     model_params["AdaBoost"] = {
                         "n_estimators": st.slider("n_estimators", 50, 500, 200, 50, key="ab_n"),
                         "learning_rate": st.slider("learning_rate", 0.01, 2.0, 0.1, 0.01, key="ab_lr"),
@@ -312,12 +342,12 @@ def main():
     # ------------------------------------------------------------------
     # ANA İÇERİK — HEADER
     # ------------------------------------------------------------------
-    st.markdown("# 🩸 Kan Hücresi Anomali Tespiti")
-
+    st.markdown("## 🩸 Kan Hücresi Anomali Tespiti")
     st.caption("✨ Klasik ML · Modüler Mimari · Cross-Validation · Production-Grade")
+
     st.markdown(
-        "> **Klasik Makine Öğrenmesi** ile kan hücrelerindeki anomalileri tespit eden "
-        "production-grade dashboard. Derin öğrenme **kullanılmamıştır**."
+        "Klasik Makine Öğrenmesi ile kan hücrelerindeki anomalileri tespit eden "
+        "production-grade dashboard. Derin öğrenme kullanılmamıştır."
     )
 
     # Veri yükle
@@ -333,7 +363,7 @@ def main():
     # TAB 1 — VERİ SETİ
     # ==================================================================
     with tab_data:
-        st.markdown("## 📋 Veri Seti Genel Bakış")
+        st.markdown("### 📋 Veri Seti Genel Bakış")
 
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Toplam Satır", f"{summary['n_rows']:,}")
@@ -376,12 +406,12 @@ def main():
     # TAB 2 — EDA
     # ==================================================================
     with tab_eda:
-        st.markdown("## 📊 Keşifsel Veri Analizi")
+        st.markdown("### 📊 Keşifsel Veri Analizi")
 
         df_clean = loader.clean(raw_df.copy())
 
         # Anomali dağılımı
-        st.markdown("### 🎯 Anomali Dağılımı")
+        st.markdown("#### 🎯 Anomali Dağılımı")
         col_a, col_b = st.columns([1, 2])
 
         with col_a:
@@ -395,7 +425,7 @@ def main():
             plt.close()
 
         # Box plot karşılaştırması
-        st.markdown("### 📦 Normal vs Anomali Karşılaştırması")
+        st.markdown("#### 📦 Normal vs Anomali Karşılaştırması")
         num_cols = df_clean.select_dtypes(include=["number"]).columns.drop("anomaly_label").tolist()
 
         default_box_feats = num_cols[:6] if len(num_cols) >= 6 else num_cols
@@ -409,14 +439,14 @@ def main():
             plt.close()
 
         # Histogram
-        st.markdown("### 📈 Sayısal Özellik Dağılımları")
+        st.markdown("#### 📈 Sayısal Özellik Dağılımları")
         selected_feat = st.selectbox("Özellik Seçin:", num_cols, index=0)
         fig_hist = viz.plot_feature_histogram(df_clean, selected_feat)
         st.pyplot(fig_hist)
         plt.close()
 
         # Korelasyon matrisi
-        st.markdown("### 🔗 Korelasyon Matrisi")
+        st.markdown("#### 🔗 Korelasyon Matrisi")
         fig_corr = viz.plot_correlation_matrix(df_clean)
         st.pyplot(fig_corr)
         plt.close()
@@ -425,20 +455,20 @@ def main():
     # TAB 3 — EĞİTİM
     # ==================================================================
     with tab_train:
-        st.markdown("## 🤖 Model Eğitimi")
+        st.markdown("### 🤖 Model Eğitimi")
 
         if not selected_models:
-            st.error("⚠️ Lütfen sol panelden en az 1 model seçin.")
+            st.error("Lütfen sol panelden en az 1 model seçin.")
             return
 
         if not train_button:
             st.info(
-                "👈 Sol paneldeki kontrolleri ayarlayın ve **'🚀 Modelleri Eğit'** "
+                "Sol paneldeki kontrolleri ayarlayın ve **'Modelleri Eğit'** "
                 "butonuna tıklayın."
             )
 
             # Pipeline adımları
-            st.markdown("### 📝 Eğitim Pipeline Adımları")
+            st.markdown("#### 📝 Eğitim Pipeline Adımları")
             st.markdown(
                 "1. **Veri Temizleme**: Leakage ve kimlik sütunları kaldırılır.\n"
                 "2. **One-Hot Encoding**: Kategorik değişkenler sayısallaştırılır.\n"
@@ -449,7 +479,7 @@ def main():
                 "7. **Değerlendirme**: Eğitim sonrasında zengin metrikler üretilir."
             )
 
-            st.markdown("### 🤖 Desteklenen Modeller")
+            st.markdown("#### 🤖 Desteklenen Modeller")
             st.caption("XGBoost · LightGBM · Random Forest · Extra Trees · Gradient Boosting · AdaBoost · Logistic Regression")
             return
 
@@ -469,9 +499,9 @@ def main():
         progress.progress(15, text="Ön işleme tamamlandı.")
 
         # Bilgi
-        smote_text = " (SMOTE uygulandı)" if apply_smote else ""
+        smote_text = " (SMOTE kullanıldı)" if apply_smote else ""
         st.success(
-            f"✅ Veri hazır — Train: **{split.X_train.shape[0]:,}** satır{smote_text}, "
+            f"Veri hazır — Train: **{split.X_train.shape[0]:,}** satır{smote_text}, "
             f"Test: **{split.X_test.shape[0]:,}** satır, "
             f"Özellik: **{split.X_train.shape[1]}**"
         )
@@ -519,7 +549,7 @@ def main():
                 cv_std=result.cv_std,
             )
 
-        progress.progress(100, text="✅ Tüm modeller eğitildi!")
+        progress.progress(100, text="Tüm modeller eğitildi.")
 
         # Session state'e kaydet
         st.session_state["train_results"] = train_results
@@ -545,20 +575,20 @@ def main():
                 if eval_res.roc_auc is not None:
                     m7.metric("ROC-AUC", f"{eval_res.roc_auc:.4f}")
                 if eval_res.cv_mean is not None:
-                    m8.metric("CV Mean (F1)", f"{eval_res.cv_mean:.4f} ± {eval_res.cv_std:.4f}" if eval_res.cv_std else f"{eval_res.cv_mean:.4f}")
+                    m8.metric("CV Mean", f"{eval_res.cv_mean:.4f} ± {eval_res.cv_std:.4f}" if eval_res.cv_std else f"{eval_res.cv_mean:.4f}")
 
                 if result.best_params:
-                    st.markdown("**🔧 En İyi Parametreler:**")
+                    st.markdown("**En İyi Parametreler:**")
                     st.json(result.best_params)
 
     # ==================================================================
     # TAB 4 — SONUÇLAR
     # ==================================================================
     with tab_results:
-        st.markdown("## 📈 Detaylı Sonuçlar ve Karşılaştırma")
+        st.markdown("### 📈 Detaylı Sonuçlar ve Karşılaştırma")
 
         if "trained" not in st.session_state or not st.session_state["trained"]:
-            st.info("⏳ Henüz model eğitilmedi. 'Eğitim' sekmesinden modelleri eğitin.")
+            st.info("Henüz model eğitilmedi. 'Eğitim' sekmesinden modelleri eğitin.")
             return
 
         train_results = st.session_state["train_results"]
@@ -576,7 +606,7 @@ def main():
         )
 
         # Karşılaştırma tablosu
-        st.markdown("### 📋 Karşılaştırma Tablosu")
+        st.markdown("#### 📋 Karşılaştırma Tablosu")
         comp_df = evaluator.get_comparison_table()
         st.dataframe(
             comp_df.style.format("{:.4f}").highlight_max(axis=0, color="#e94560"),
@@ -584,7 +614,7 @@ def main():
         )
 
         # Metrik karşılaştırma grafiği
-        st.markdown("### 📊 Performans Karşılaştırması")
+        st.markdown("#### 📊 Performans Karşılaştırması")
         fig_comp = viz.plot_metric_comparison(comp_df)
         if fig_comp:
             st.pyplot(fig_comp)
@@ -596,13 +626,13 @@ def main():
             if res.cv_scores is not None:
                 cv_data[name] = res.cv_scores
         if cv_data:
-            st.markdown("### 📉 Cross-Validation Skor Dağılımı")
+            st.markdown("#### 📉 Cross-Validation Skor Dağılımı")
             fig_cv = viz.plot_cv_scores(cv_data)
             st.pyplot(fig_cv)
             plt.close()
 
         # Confusion Matrix
-        st.markdown(f"### 🔲 Confusion Matrix — {best_name}")
+        st.markdown(f"#### 🔲 Confusion Matrix — {best_name}")
         fig_cm = viz.plot_confusion_matrix(
             y_test, train_results[best_name].y_pred, best_name, best_eval.f1,
         )
@@ -610,7 +640,7 @@ def main():
         plt.close()
 
         # ROC Curve
-        st.markdown("### 📉 ROC Curve Karşılaştırması")
+        st.markdown("#### 📉 ROC Curve")
         roc_data = {}
         for name, res in train_results.items():
             if res.y_proba is not None:
@@ -622,7 +652,7 @@ def main():
             plt.close()
 
         # Precision-Recall Curve
-        st.markdown("### 📈 Precision-Recall Curve")
+        st.markdown("#### 📈 Precision-Recall Curve")
         pr_data = {}
         for name, res in train_results.items():
             if res.y_proba is not None:
@@ -634,7 +664,7 @@ def main():
             plt.close()
 
         # Feature Importance
-        st.markdown("### 🔍 Özellik Önemleri")
+        st.markdown("#### 🔍 Özellik Önemleri")
         fi_model_name = st.selectbox("Model Seçin:", list(train_results.keys()), key="fi_select")
         fig_fi = viz.plot_feature_importance(
             train_results[fi_model_name].model, feature_names, fi_model_name,
@@ -646,32 +676,31 @@ def main():
             st.warning("Bu model için feature importance bilgisi mevcut değil.")
 
         # Classification Report
-        st.markdown("### 📝 Sınıflandırma Raporu")
+        st.markdown("#### 📝 Sınıflandırma Raporu")
         cr_model = st.selectbox("Model Seçin:", list(evaluator.results.keys()), key="cr_select")
         st.code(evaluator.results[cr_model].classification_rep, language="text")
 
         # Model Kaydetme
         st.markdown("---")
-        st.markdown("### 💾 Model Kaydet")
+        st.markdown("#### 💾 Model Kaydet")
         save_col1, save_col2 = st.columns([2, 1])
         with save_col1:
             save_model_name = st.selectbox(
-                "Kaydedilecek Model:", list(train_results.keys()), key="save_select",
+                "Kaydedilecek Modeli Seçin:", list(train_results.keys()), key="save_select",
             )
         with save_col2:
-            if st.button("💾 Kaydet", key="save_btn"):
+            if st.button("Kaydet", key="save_btn"):
                 safe_name = save_model_name.lower().replace(" ", "_").replace("(", "").replace(")", "")
                 filepath = os.path.join(MODELS_DIR, f"{safe_name}.joblib")
                 saved = ModelFactory.save_model(train_results[save_model_name].model, filepath)
-                st.success(f"✅ Model kaydedildi: `{saved}`")
+                st.success(f"Model kaydedildi: `{saved}`")
 
         # Sonuç özeti
         st.markdown("---")
         st.info(
             f"**📝 Sonuç Özeti:**  \n"
             f"Eğitilen modeller içerisinde en yüksek F1-Skoru **{best_name}** tarafından alınıştır "
-            f"(F1: `{best_eval.f1:.4f}`). Sadece fiziksel ve kimyasal parametreler kullanılarak "
-            f"Data Leakage tamamiyle önlenmiş ve derin öğrenme KULLANILMAMIŞTIR."
+            f"(F1: `{best_eval.f1:.4f}`). Kaynak verinin özellikleri işlenmiş, sızıntı (data leakage) engellenmiştir."
         )
 
 
