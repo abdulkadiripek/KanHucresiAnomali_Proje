@@ -49,273 +49,55 @@ st.set_page_config(
 # ============================================================================
 st.markdown("""
 <style>
-    /* ========== FONT ========== */
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
-
-    * {
-        font-family: 'Inter', sans-serif !important;
+    /* ========== ULTRA MODERN MINIMAL THEME ========== */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    
+    html, body, [class*="css"] {
+        font-family: 'Inter', sans-serif;
     }
-
-    /* ========== ANA ARKA PLAN ========== */
+    
+    /* Subtle background and borders for a clean flat look */
     .stApp {
-        background: linear-gradient(160deg, #0a0a1a 0%, #0f0c29 30%, #1a1a2e 60%, #16213e 100%);
+        background-color: #0E1117;
+    }
+    
+    /* Remove padding around main content for flush look */
+    .block-container {
+        padding-top: 2rem !important;
+        max-width: 1200px;
     }
 
-    /* ========== SIDEBAR ========== */
-    section[data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #0a0a1a 0%, #0f0c29 50%, #12122a 100%);
-        border-right: 1px solid rgba(233, 69, 96, 0.15);
-    }
-    section[data-testid="stSidebar"] .stMarkdown h2 {
-        font-size: 1.2rem !important;
-        letter-spacing: 0.5px;
-    }
-
-    /* ========== GLASSMORPHISM KARTLAR ========== */
-    div[data-testid="stMetric"] {
-        background: rgba(26, 26, 46, 0.6);
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 16px;
-        padding: 20px;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-    div[data-testid="stMetric"]:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 12px 40px rgba(233, 69, 96, 0.2);
-        border-color: rgba(233, 69, 96, 0.3);
-    }
-    div[data-testid="stMetric"] label {
-        color: #a0a0b8 !important;
-        font-size: 0.82rem !important;
-        font-weight: 500 !important;
-        text-transform: uppercase;
-        letter-spacing: 0.8px;
-    }
-    div[data-testid="stMetric"] [data-testid="stMetricValue"] {
-        font-weight: 800 !important;
-        font-size: 1.8rem !important;
-        background: linear-gradient(135deg, #e94560, #ff6b6b);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-    }
-
-    /* ========== BAŞLIKLAR ========== */
-    h1 {
-        background: linear-gradient(135deg, #e94560 0%, #ff6b6b 40%, #feca57 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        font-weight: 900 !important;
-        font-size: 2.4rem !important;
+    /* Minimalist headers */
+    h1, h2, h3 {
+        color: #F8F9FA !important;
+        font-weight: 600 !important;
         letter-spacing: -0.5px;
-        margin-bottom: 0.5rem !important;
     }
-    h2 {
-        color: #e94560 !important;
+    
+    /* Metric styling */
+    div[data-testid="stMetricValue"] {
         font-weight: 700 !important;
-        font-size: 1.5rem !important;
-        border-bottom: 2px solid rgba(233, 69, 96, 0.2);
-        padding-bottom: 10px;
-        margin-top: 1.5rem !important;
+        color: #4C82E3 !important; /* Soft minimal blue */
     }
-    h3 {
-        color: #feca57 !important;
-        font-weight: 600 !important;
-        font-size: 1.15rem !important;
-    }
-
-    /* ========== TAB ========== */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 2px;
-        background: rgba(10, 10, 26, 0.6);
-        backdrop-filter: blur(10px);
-        border-radius: 14px;
-        padding: 5px;
-        border: 1px solid rgba(255, 255, 255, 0.05);
-    }
-    .stTabs [data-baseweb="tab"] {
-        border-radius: 10px;
-        padding: 10px 24px;
-        color: #7a7a9e;
-        font-weight: 600;
-        font-size: 0.9rem;
-        transition: all 0.3s ease;
-    }
-    .stTabs [data-baseweb="tab"]:hover {
-        color: #e94560;
-        background: rgba(233, 69, 96, 0.08);
-    }
-    .stTabs [aria-selected="true"] {
-        background: linear-gradient(135deg, #e94560, #c0392b) !important;
-        color: white !important;
-        box-shadow: 0 4px 15px rgba(233, 69, 96, 0.4);
-    }
-
-    /* ========== BUTONLAR ========== */
+    
+    /* Button flattening */
     .stButton > button {
-        background: linear-gradient(135deg, #e94560 0%, #c0392b 100%) !important;
-        color: white !important;
-        border: none !important;
-        border-radius: 12px !important;
-        font-weight: 700 !important;
-        padding: 14px 36px !important;
-        font-size: 15px !important;
-        letter-spacing: 0.3px;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-        box-shadow: 0 4px 20px rgba(233, 69, 96, 0.35) !important;
-    }
-    .stButton > button:hover {
-        transform: translateY(-3px) scale(1.02) !important;
-        box-shadow: 0 8px 30px rgba(233, 69, 96, 0.55) !important;
-    }
-    .stButton > button:active {
-        transform: translateY(0px) scale(0.98) !important;
-    }
-
-    /* ========== EXPANDER ========== */
-    .streamlit-expanderHeader {
-        background: rgba(26, 26, 46, 0.5) !important;
-        border-radius: 10px !important;
-        border: 1px solid rgba(255, 255, 255, 0.06) !important;
-        font-weight: 600 !important;
-    }
-
-    /* ========== DATAFRAME ========== */
-    .stDataFrame {
-        border-radius: 14px;
-        overflow: hidden;
-        border: 1px solid rgba(255, 255, 255, 0.06);
-    }
-
-    /* ========== SLIDER ========== */
-    .stSlider > div > div > div {
-        background: #e94560 !important;
-    }
-    .stSlider > div > div > div > div {
-        background: #e94560 !important;
-        box-shadow: 0 0 10px rgba(233, 69, 96, 0.5);
-    }
-
-    /* ========== DIVIDER ========== */
-    hr {
-        border-color: rgba(233, 69, 96, 0.12) !important;
-        margin: 1.5rem 0 !important;
-    }
-
-    /* ========== ALERT ========== */
-    .stAlert {
-        border-radius: 12px !important;
-        backdrop-filter: blur(10px);
-    }
-
-    /* ========== MULTISELECT ========== */
-    .stMultiSelect [data-baseweb="tag"] {
-        background: linear-gradient(135deg, #e94560, #c0392b) !important;
         border-radius: 8px !important;
+        font-weight: 500 !important;
+        transition: all 0.2s ease !important;
     }
-
-    /* ========== SELECT BOX ========== */
-    .stSelectbox [data-baseweb="select"] > div {
-        background: rgba(26, 26, 46, 0.8) !important;
-        border: 1px solid rgba(255, 255, 255, 0.1) !important;
-        border-radius: 10px !important;
+    .stButton > button[data-testid="baseButton-primary"] {
+        background-color: #4C82E3 !important;
+        border: none !important;
     }
-
-    /* ========== SUCCESS/INFO/WARNING KUTU ========== */
-    div[data-testid="stNotification"] {
-        border-radius: 12px !important;
+    .stButton > button[data-testid="baseButton-primary"]:hover {
+        background-color: #3b6bd1 !important;
     }
-
-    /* ========== PROGRESS BAR ========== */
-    .stProgress > div > div > div > div {
-        background: linear-gradient(90deg, #e94560, #feca57) !important;
-        border-radius: 8px;
-    }
-
-    /* ========== CUSTOM BADGE ========== */
-    .badge-container {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-        margin: 8px 0;
-    }
-    .badge {
-        display: inline-block;
-        padding: 4px 12px;
-        border-radius: 20px;
-        font-size: 0.75rem;
-        font-weight: 600;
-        letter-spacing: 0.5px;
-    }
-    .badge-red { background: rgba(233, 69, 96, 0.2); color: #e94560; border: 1px solid rgba(233, 69, 96, 0.3); }
-    .badge-yellow { background: rgba(254, 202, 87, 0.15); color: #feca57; border: 1px solid rgba(254, 202, 87, 0.3); }
-    .badge-blue { background: rgba(0, 210, 255, 0.15); color: #00d2ff; border: 1px solid rgba(0, 210, 255, 0.3); }
-    .badge-green { background: rgba(123, 237, 159, 0.15); color: #7bed9f; border: 1px solid rgba(123, 237, 159, 0.3); }
-
-    /* ========== INFO CARD ========== */
-    .info-card {
-        background: rgba(26, 26, 46, 0.5);
-        backdrop-filter: blur(16px);
-        border: 1px solid rgba(255, 255, 255, 0.06);
-        border-radius: 16px;
-        padding: 24px;
-        margin: 12px 0;
-    }
-    .info-card h4 {
-        color: #feca57 !important;
-        margin-bottom: 12px;
-        font-size: 1rem;
-    }
-    .info-card p {
-        color: #a0a0b8;
-        font-size: 0.9rem;
-        line-height: 1.6;
-    }
-
-    /* ========== STEP INDICATOR ========== */
-    .step-item {
-        display: flex;
-        align-items: flex-start;
-        gap: 16px;
-        margin: 16px 0;
-        padding: 16px 20px;
-        background: rgba(26, 26, 46, 0.4);
-        border-radius: 14px;
-        border-left: 3px solid #e94560;
-        transition: all 0.3s ease;
-    }
-    .step-item:hover {
-        background: rgba(233, 69, 96, 0.06);
-        transform: translateX(4px);
-    }
-    .step-number {
-        background: linear-gradient(135deg, #e94560, #c0392b);
-        color: white;
-        width: 32px;
-        height: 32px;
-        border-radius: 10px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: 800;
-        font-size: 0.85rem;
-        flex-shrink: 0;
-    }
-    .step-content {
-        flex: 1;
-    }
-    .step-title {
-        color: #ffffff;
-        font-weight: 600;
-        font-size: 0.95rem;
-        margin-bottom: 4px;
-    }
-    .step-desc {
-        color: #7a7a9e;
-        font-size: 0.82rem;
-        line-height: 1.4;
+    
+    /* Tabs minimalism */
+    .stTabs [data-baseweb="tab"] {
+        padding-top: 0.5rem;
+        padding-bottom: 0.5rem;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -475,28 +257,14 @@ def main():
 
         # Footer
         st.markdown("---")
-        st.markdown(
-            '<div style="text-align:center; color:#5a5a7a; font-size:0.75rem;">'
-            'Klasik ML • Derin Öğrenme Yok<br>'
-            'Modüler Mimari v2.0'
-            '</div>',
-            unsafe_allow_html=True,
-        )
+        st.caption("Klasik ML • Derin Öğrenme Yok • Modüler Mimari v2.0")
 
     # ------------------------------------------------------------------
     # ANA İÇERİK — HEADER
     # ------------------------------------------------------------------
     st.markdown("# 🩸 Kan Hücresi Anomali Tespiti")
 
-    st.markdown(
-        '<div class="badge-container">'
-        '<span class="badge badge-red">Klasik ML</span>'
-        '<span class="badge badge-yellow">Modüler Mimari</span>'
-        '<span class="badge badge-blue">Cross-Validation</span>'
-        '<span class="badge badge-green">Production-Grade</span>'
-        '</div>',
-        unsafe_allow_html=True,
-    )
+    st.caption("✨ Klasik ML · Modüler Mimari · Cross-Validation · Production-Grade")
     st.markdown(
         "> **Klasik Makine Öğrenmesi** ile kan hücrelerindeki anomalileri tespit eden "
         "production-grade dashboard. Derin öğrenme **kullanılmamıştır**."
@@ -540,20 +308,10 @@ def main():
         st.dataframe(col_info, width="stretch", height=400)
 
         st.markdown("### 🧹 Kaldırılacak Sütunlar")
-        st.markdown(
-            '<div class="info-card">'
-            '<h4>🛡️ Data Leakage Önlemi</h4>'
-            '<p>Aşağıdaki sütunlar eğitimden çıkarılır:</p>'
-            '<p>'
-            '• <strong>cell_id</strong> — Kimlik bilgisi, modele katkısı yok<br>'
-            '• <strong>disease_category</strong> — Doğrudan hedef ile ilişkili<br>'
-            '• <strong>cell_type</strong> — Doğrudan hedef ile ilişkili<br>'
-            '• <strong>cytodiffusion_anomaly_score</strong> — Anomali sızıntısı<br>'
-            '• <strong>cytodiffusion_classification_confidence</strong> — Sınıflandırma sızıntısı<br>'
-            '• <strong>labeller_confidence_score</strong> — Etiketleyici güven sızıntısı'
-            '</p>'
-            '</div>',
-            unsafe_allow_html=True,
+        st.warning(
+            "**🛡️ Data Leakage Önlemi** — Eğitimden çıkarılan sütunlar:\n"
+            "* **cell_id, cell_type, disease_category**: Doğrudan hedef ile ilişkili veya kimlik.\n"
+            "* **cytodiffusion_anomaly_score, cytodiffusion_classification_confidence, labeller_confidence_score**: Anomali sızıntıları."
         )
 
         st.markdown("### 📈 Temel İstatistikler")
@@ -631,41 +389,18 @@ def main():
 
             # Pipeline adımları
             st.markdown("### 📝 Eğitim Pipeline Adımları")
-            steps = [
-                ("Veri Temizleme", "Leakage ve kimlik sütunları kaldırılır"),
-                ("One-Hot Encoding", "Kategorik değişkenler sayısallaştırılır"),
-                ("Train/Test Split", "Stratified bölünme (sınıf dengesi korunur)"),
-                ("StandardScaler", "Sayısal özellikler ölçeklenir (fit → train)"),
-                ("SMOTE (Opsiyonel)", "Dengesiz veri için over-sampling"),
-                ("Cross-Validation", "5-Fold StratifiedKFold ile güvenilirlik testi"),
-                ("Model Eğitimi", "Seçilen algoritmalar eğitilir"),
-                ("Değerlendirme", "12+ metrik üretilir (MCC, Kappa, PR-AUC vb.)"),
-            ]
-            steps_html = ""
-            for i, (title, desc) in enumerate(steps, 1):
-                steps_html += (
-                    f'<div class="step-item">'
-                    f'<div class="step-number">{i}</div>'
-                    f'<div class="step-content">'
-                    f'<div class="step-title">{title}</div>'
-                    f'<div class="step-desc">{desc}</div>'
-                    f'</div></div>'
-                )
-            st.markdown(steps_html, unsafe_allow_html=True)
+            st.markdown(
+                "1. **Veri Temizleme**: Leakage ve kimlik sütunları kaldırılır.\n"
+                "2. **One-Hot Encoding**: Kategorik değişkenler sayısallaştırılır.\n"
+                "3. **Train/Test Split**: Stratified bölünme ile dengeli dağılım sağlanır.\n"
+                "4. **StandardScaler**: Sayısal sütunlar ölçeklenir.\n"
+                "5. **SMOTE**: Dengesiz sınıflar üzerinde sentetik veri üretilir (opsiyonel).\n"
+                "6. **Cross-Validation**: Modeller K-Fold ile test edilerek çapraz doğrulanır.\n"
+                "7. **Değerlendirme**: Eğitim sonrasında zengin metrikler üretilir."
+            )
 
             st.markdown("### 🤖 Desteklenen Modeller")
-            st.markdown(
-                '<div class="badge-container">'
-                '<span class="badge badge-red">XGBoost</span>'
-                '<span class="badge badge-yellow">LightGBM</span>'
-                '<span class="badge badge-green">Random Forest</span>'
-                '<span class="badge badge-blue">Extra Trees</span>'
-                '<span class="badge badge-red">Gradient Boosting</span>'
-                '<span class="badge badge-yellow">AdaBoost</span>'
-                '<span class="badge badge-blue">Logistic Regression</span>'
-                '</div>',
-                unsafe_allow_html=True,
-            )
+            st.caption("XGBoost · LightGBM · Random Forest · Extra Trees · Gradient Boosting · AdaBoost · Logistic Regression")
             return
 
         # ---- EĞİTİM BAŞLAT ----
@@ -785,16 +520,9 @@ def main():
         best_name = evaluator.get_best_model("F1-Score")
         best_eval = evaluator.results[best_name]
 
-        st.markdown(
-            f'<div class="info-card">'
-            f'<h4>🏆 En İyi Model: {best_name}</h4>'
-            f'<p>'
-            f'F1-Score: <strong>{best_eval.f1:.4f}</strong> · '
-            f'Accuracy: <strong>{best_eval.accuracy:.4f}</strong> · '
-            f'MCC: <strong>{best_eval.mcc:.4f}</strong>'
-            f'</p>'
-            f'</div>',
-            unsafe_allow_html=True,
+        st.success(
+            f"**🏆 En İyi Model: {best_name}**  \n"
+            f"F1-Score: `{best_eval.f1:.4f}` · Accuracy: `{best_eval.accuracy:.4f}` · MCC: `{best_eval.mcc:.4f}`"
         )
 
         # Karşılaştırma tablosu
@@ -889,19 +617,11 @@ def main():
 
         # Sonuç özeti
         st.markdown("---")
-        st.markdown(
-            f'<div class="info-card">'
-            f'<h4>📝 Sonuç Özeti</h4>'
-            f'<p>'
-            f'<strong>{len(train_results)}</strong> klasik ML modeli eğitildi ve '
-            f'test seti üzerinde değerlendirildi.<br><br>'
-            f'🏆 <strong>En yüksek F1-Score:</strong> {best_name} '
-            f'(<strong>{best_eval.f1:.4f}</strong>)<br><br>'
-            f'Tüm modeller yalnızca hücrenin fiziksel/kimyasal özelliklerini kullanmıştır. '
-            f'Data Leakage önlenmiş, hiçbir derin öğrenme yöntemi kullanılmamıştır.'
-            f'</p>'
-            f'</div>',
-            unsafe_allow_html=True,
+        st.info(
+            f"**📝 Sonuç Özeti:**  \n"
+            f"Eğitilen modeller içerisinde en yüksek F1-Skoru **{best_name}** tarafından alınıştır "
+            f"(F1: `{best_eval.f1:.4f}`). Sadece fiziksel ve kimyasal parametreler kullanılarak "
+            f"Data Leakage tamamiyle önlenmiş ve derin öğrenme KULLANILMAMIŞTIR."
         )
 
 
