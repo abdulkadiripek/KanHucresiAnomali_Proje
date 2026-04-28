@@ -38,8 +38,7 @@ matplotlib.use("Agg")
 # SAYFA AYARLARI
 # ============================================================================
 st.set_page_config(
-    page_title="🩸 Kan Hücresi Anomali Tespiti",
-    page_icon="🔬",
+    page_title="Kan Hücresi Anomali Tespiti",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -49,56 +48,107 @@ st.set_page_config(
 # ============================================================================
 st.markdown("""
 <style>
-    /* ========== ULTRA MODERN MINIMAL THEME ========== */
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    /* ========== ULTRA MODERN APPLE-INSPIRED THEME ========== */
     
     html, body, [class*="css"] {
-        font-family: 'Inter', sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        -webkit-font-smoothing: antialiased;
     }
     
-    /* Subtle background and borders for a clean flat look */
+    /* Clean flat background */
     .stApp {
-        background-color: #0E1117;
+        background-color: #000000;
     }
     
-    /* Remove padding around main content for flush look */
     .block-container {
-        padding-top: 2rem !important;
-        max-width: 1200px;
+        padding-top: 3rem !important;
+        max-width: 1000px; /* narrowed focus */
     }
 
-    /* Minimalist headers */
-    h1, h2, h3 {
-        color: #F8F9FA !important;
+    /* Minimalist crisp headers */
+    h1 {
+        font-weight: 700 !important;
+        letter-spacing: -0.04em;
+        color: #FFFFFF !important;
+        font-size: 2.2rem !important;
+    }
+    
+    h2, h3 {
+        color: #F5F5F7 !important;
         font-weight: 600 !important;
-        letter-spacing: -0.5px;
+        letter-spacing: -0.02em;
+    }
+
+    h3 {
+        font-size: 1.1rem !important;
+        color: #86868B !important; /* Neutral grey */
+        margin-top: 2rem !important;
+    }
+
+    p, span, div {
+        color: #A1A1A6;
     }
     
     /* Metric styling */
     div[data-testid="stMetricValue"] {
-        font-weight: 700 !important;
-        color: #4C82E3 !important; /* Soft minimal blue */
+        font-weight: 500 !important;
+        font-size: 2.5rem !important;
+        color: #FFFFFF !important; 
+        letter-spacing: -0.03em;
     }
     
-    /* Button flattening */
+    div[data-testid="stMetricLabel"] {
+        color: #86868B !important;
+        font-size: 0.85rem !important;
+        font-weight: 400 !important;
+    }
+    
+    /* Button flattening - iOS style */
     .stButton > button {
-        border-radius: 8px !important;
+        border-radius: 980px !important; /* Pill shape */
         font-weight: 500 !important;
         transition: all 0.2s ease !important;
+        letter-spacing: -0.01em !important;
+        font-size: 0.95rem !important;
     }
     .stButton > button[data-testid="baseButton-primary"] {
-        background-color: #4C82E3 !important;
+        background-color: #FFFFFF !important;
+        color: #000000 !important;
         border: none !important;
+        padding: 0.5rem 1.5rem !important;
     }
     .stButton > button[data-testid="baseButton-primary"]:hover {
-        background-color: #3b6bd1 !important;
+        background-color: #E5E5EA !important;
+        color: #000000 !important;
+    }
+    
+    /* Sidebar */
+    section[data-testid="stSidebar"] {
+        background-color: #1c1c1e !important;
+        border-right: 1px solid #38383a;
+    }
+    
+    /* Input widgets styling */
+    .stSelectbox [data-baseweb="select"] > div,
+    .stMultiSelect [data-baseweb="select"] > div {
+        background-color: #2c2c2e !important;
+        border: 1px solid #38383a !important;
+        border-radius: 12px !important;
     }
     
     /* Tabs minimalism */
     .stTabs [data-baseweb="tab"] {
-        padding-top: 0.5rem;
-        padding-bottom: 0.5rem;
+        font-size: 0.9rem;
+        color: #86868B;
+        padding-top: 0.8rem;
+        padding-bottom: 0.8rem;
     }
+    
+    .stTabs [aria-selected="true"] {
+        color: #FFFFFF !important;
+        font-weight: 500;
+    }
+    
 </style>
 """, unsafe_allow_html=True)
 
@@ -133,11 +183,11 @@ def main():
     # SIDEBAR
     # ------------------------------------------------------------------
     with st.sidebar:
-        st.markdown("## 🔬 Kontrol Paneli")
+        st.markdown("## Kontrol Paneli")
         st.markdown("---")
 
         # Veri ayarları
-        st.markdown("### 📊 Veri Ayarları")
+        st.markdown("### Veri Ayarları")
         test_size = st.slider(
             "Test Seti Oranı (%)", 10, 40, 20, 5,
             help="Verinin yüzde kaçı test için ayrılsın?",
@@ -152,7 +202,7 @@ def main():
         st.markdown("---")
 
         # Model seçimi
-        st.markdown("### 🤖 Model Seçimi")
+        st.markdown("### Model Seçimi")
         selected_models = st.multiselect(
             "Eğitilecek Modeller",
             ALL_MODELS,
@@ -163,7 +213,7 @@ def main():
         st.markdown("---")
 
         # Eğitim modu
-        st.markdown("### 🎯 Eğitim Modu")
+        st.markdown("### Eğitim Modu")
         training_mode = st.radio(
             "Mod Seçin",
             ["Manuel Parametreler", "Otomatik Tuning (RandomizedSearchCV)"],
@@ -182,10 +232,10 @@ def main():
         # Hiperparametre ayarları (sadece manuel modda)
         model_params = {}
         if training_mode == "Manuel Parametreler":
-            st.markdown("### ⚙️ Hiperparametreler")
+            st.markdown("### Hiperparametreler")
 
             if "XGBoost" in selected_models:
-                with st.expander("🔷 XGBoost", expanded=False):
+                with st.expander("XGBoost", expanded=False):
                     model_params["XGBoost"] = {
                         "n_estimators": st.slider("n_estimators", 50, 1000, 300, 50, key="xgb_n"),
                         "max_depth": st.slider("max_depth", 2, 15, 6, 1, key="xgb_d"),
@@ -195,7 +245,7 @@ def main():
                     }
 
             if "LightGBM" in selected_models:
-                with st.expander("💡 LightGBM", expanded=False):
+                with st.expander("LightGBM", expanded=False):
                     model_params["LightGBM"] = {
                         "n_estimators": st.slider("n_estimators", 50, 1000, 300, 50, key="lgb_n"),
                         "max_depth": st.slider("max_depth (0=Auto)", 0, 15, 0, 1, key="lgb_d"),
@@ -208,7 +258,7 @@ def main():
                         model_params["LightGBM"]["max_depth"] = -1
 
             if "Random Forest" in selected_models:
-                with st.expander("🌲 Random Forest", expanded=False):
+                with st.expander("Random Forest", expanded=False):
                     model_params["Random Forest"] = {
                         "n_estimators": st.slider("n_estimators", 50, 1000, 300, 50, key="rf_n"),
                         "max_depth": st.slider("max_depth (0=None)", 0, 30, 0, 1, key="rf_d"),
@@ -219,7 +269,7 @@ def main():
                         model_params["Random Forest"]["max_depth"] = None
 
             if "Extra Trees" in selected_models:
-                with st.expander("🌳 Extra Trees", expanded=False):
+                with st.expander("Extra Trees", expanded=False):
                     model_params["Extra Trees"] = {
                         "n_estimators": st.slider("n_estimators", 50, 1000, 300, 50, key="et_n"),
                         "max_depth": st.slider("max_depth (0=None)", 0, 30, 0, 1, key="et_d"),
@@ -230,7 +280,7 @@ def main():
                         model_params["Extra Trees"]["max_depth"] = None
 
             if "Gradient Boosting" in selected_models:
-                with st.expander("📈 Gradient Boosting", expanded=False):
+                with st.expander("Gradient Boosting", expanded=False):
                     model_params["Gradient Boosting"] = {
                         "n_estimators": st.slider("n_estimators", 50, 500, 200, 50, key="gb_n"),
                         "max_depth": st.slider("max_depth", 2, 10, 5, 1, key="gb_d"),
@@ -239,7 +289,7 @@ def main():
                     }
 
             if "AdaBoost" in selected_models:
-                with st.expander("⚡ AdaBoost", expanded=False):
+                with st.expander("AdaBoost", expanded=False):
                     model_params["AdaBoost"] = {
                         "n_estimators": st.slider("n_estimators", 50, 500, 200, 50, key="ab_n"),
                         "learning_rate": st.slider("learning_rate", 0.01, 2.0, 0.1, 0.01, key="ab_lr"),
