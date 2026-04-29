@@ -214,6 +214,17 @@ def load_saved_models():
             models[name] = joblib.load(model_path)
 
     metadata["models"] = models
+
+    # Preprocessor (scaler + feature_names) — manuel tahmin için gerekli
+    preprocessor_path = os.path.join(MODELS_DIR, "preprocessor.joblib")
+    if os.path.exists(preprocessor_path):
+        metadata["preprocessor"] = joblib.load(preprocessor_path)
+
+    # Hastalık sınıflandırıcı (multi-class)
+    disease_path = os.path.join(MODELS_DIR, "disease_classifier.joblib")
+    if os.path.exists(disease_path):
+        metadata["disease"] = joblib.load(disease_path)
+
     return metadata
 
 
@@ -244,6 +255,7 @@ def main():
                 "🤖 Eğitim",
                 "📈 Sonuçlar",
                 "🧠 Açıklanabilirlik",
+                "🔬 Manuel Tahmin",
             ],
             label_visibility="collapsed",
         )
@@ -847,6 +859,201 @@ def main():
                 "🔹 **Klinik güven:** Bir uzman, modelin kararını adım adım inceleyip onaylayabilir  \n"
                 "🔹 **Hata tespiti:** Yanlış tahminlerde hangi özelliklerin yanılttığını görebiliriz"
             )
+
+    # ==================================================================
+    # TAB 6 — MANUEL TAHMİN
+    # ==================================================================
+    elif page == "🔬 Manuel Tahmin":
+        render_prediction_page(loader, saved)
+
+
+# ============================================================================
+# MANUEL TAHMİN — yardımcı fonksiyon
+# ============================================================================
+def predict_single(input_dict: dict, model, preprocessor_meta: dict) -> tuple:
+    """Tek bir kullanıcı girdisi için tahmin üretir.
+
+    Args:
+        input_dict: ham özellik adı → değer.
+        model: Eğitilmiş sklearn-uyumlu model.
+        preprocessor_meta: scaler + feature_names + numerical_cols içeren dict.
+
+    Returns:
+        (prediction:int, probability:float|None)
+    """
+    feature_names = preprocessor_meta["feature_names"]
+    numerical_cols = preprocessor_meta["numerical_cols"]
+    scaler = preprocessor_meta["scaler"]
+
+    row = pd.DataFrame([input_dict])
+
+    cat_cols = row.select_dtypes(include=["object"]).columns.tolist()
+    row = pd.get_dummies(row, columns=cat_cols, drop_first=True)
+    row = row.reindex(columns=feature_names, fill_value=0).astype(float)
+
+    num_present = [c for c in numerical_cols if c in row.columns]
+    if num_present:
+        row[num_present] = scaler.transform(row[num_present])
+
+    pred = int(model.predict(row)[0])
+    proba = None
+    if hasattr(model, "predict_proba"):
+        proba = float(model.predict_proba(row)[0, 1])
+    return pred, proba
+
+
+def predict_disease(input_dict: dict, disease_bundle: dict) -> tuple:
+    """Çoklu sınıf hastalık tahmini.
+
+    Returns:
+        (label:str, top3:list[(label, prob)])
+    """
+    feature_names = disease_bundle["feature_names"]
+    numerical_cols = disease_bundle["numerical_cols"]
+    scaler = disease_bundle["scaler"]
+    le = disease_bundle["label_encoder"]
+    model = disease_bundle["model"]
+
+    row = pd.DataFrame([input_dict])
+    cat_cols = row.select_dtypes(include=["object"]).columns.tolist()
+    row = pd.get_dummies(row, columns=cat_cols, drop_first=True)
+    row = row.reindex(columns=feature_names, fill_value=0).astype(float)
+
+    num_present = [c for c in numerical_cols if c in row.columns]
+    if num_present:
+        row[num_present] = scaler.transform(row[num_present])
+
+    proba = model.predict_proba(row)[0]
+    classes = le.classes_
+    order = np.argsort(proba)[::-1]
+    top3 = [(str(classes[i]), float(proba[i])) for i in order[:3]]
+    label = str(classes[order[0]])
+    return label, top3
+
+
+def render_prediction_page(loader: DataLoader, saved: dict):
+    """Manuel veri girişi → anomali tahmini sayfası."""
+    st.markdown("### 🔬 Manuel Tahmin — Hücre Verisini Sen Gir")
+    st.caption(
+        "Bir kan hücresinin morfolojik ve klinik ölçümlerini gir, "
+        "model anomali olup olmadığını tahmin etsin."
+    )
+
+    if saved is None or not saved.get("models"):
+        st.error("Eğitilmiş model bulunamadı. Önce `python3 train_models.py` çalıştırın.")
+        return
+
+    # Ham veriyi temizle (leakage/id sütunları çıkar) → form alanlarını üret
+    raw = loader.load()
+    df_clean = loader.clean(raw)
+    if "anomaly_label" in df_clean.columns:
+        df_features = df_clean.drop(columns=["anomaly_label"])
+    else:
+        df_features = df_clean
+
+    numerical_cols = df_features.select_dtypes(include=["number"]).columns.tolist()
+    categorical_cols = df_features.select_dtypes(include=["object"]).columns.tolist()
+
+    # Model seçimi
+    model_names = list(saved["models"].keys())
+    default_idx = model_names.index(saved["best_model"]) if saved.get("best_model") in model_names else 0
+    chosen_model_name = st.selectbox(
+        "Tahmin için model:", model_names, index=default_idx
+    )
+    model = saved["models"][chosen_model_name]
+
+    st.markdown("---")
+    st.markdown("#### 📝 Girdi Değerleri")
+    st.caption("Sayısal alanlar veri setinin medyan değeri ile ön doldurulmuştur.")
+
+    with st.form("manual_predict_form"):
+        input_dict = {}
+
+        # Sayısal alanlar — 3 sütunlu grid
+        st.markdown("**Sayısal Özellikler**")
+        cols = st.columns(3)
+        for i, col in enumerate(numerical_cols):
+            series = df_features[col].dropna()
+            v_min, v_max = float(series.min()), float(series.max())
+            v_med = float(series.median())
+            # Adım büyüklüğü
+            rng = max(v_max - v_min, 1e-6)
+            step = float(rng / 100) if rng < 50 else 1.0
+            with cols[i % 3]:
+                input_dict[col] = st.number_input(
+                    col,
+                    min_value=float(v_min - rng),
+                    max_value=float(v_max + rng),
+                    value=v_med,
+                    step=step,
+                    format="%.4f" if rng < 10 else "%.2f",
+                )
+
+        # Kategorik alanlar
+        if categorical_cols:
+            st.markdown("**Kategorik Özellikler**")
+            ccols = st.columns(min(3, len(categorical_cols)))
+            for i, col in enumerate(categorical_cols):
+                options = sorted(df_features[col].dropna().unique().tolist())
+                with ccols[i % len(ccols)]:
+                    input_dict[col] = st.selectbox(col, options, index=0)
+
+        submitted = st.form_submit_button("🔍 Tahmin Et", use_container_width=True)
+
+    if submitted:
+        try:
+            pred, proba = predict_single(input_dict, model, saved["preprocessor"])
+        except Exception as e:
+            st.error(f"Tahmin sırasında hata: {e}")
+            return
+
+        st.markdown("---")
+        st.markdown("#### 🎯 Tahmin Sonucu")
+        c1, c2, c3 = st.columns(3)
+        if pred == 1:
+            c1.error("**ANOMALİ TESPİT EDİLDİ**")
+        else:
+            c1.success("**NORMAL HÜCRE**")
+        c2.metric("Tahmin (0/1)", pred)
+        if proba is not None:
+            c3.metric("Anomali Olasılığı", f"{proba:.1%}")
+            st.progress(min(max(proba, 0.0), 1.0))
+
+        # ----------------------------------------------------------
+        # Hastalık tahmini (multi-class)
+        # ----------------------------------------------------------
+        disease_bundle = saved.get("disease")
+        if disease_bundle is not None:
+            try:
+                dx_label, top3 = predict_disease(input_dict, disease_bundle)
+            except Exception as e:
+                st.warning(f"Hastalık tahmini yapılamadı: {e}")
+            else:
+                st.markdown("---")
+                st.markdown("#### 🧬 Hastalık / Hücre Kategorisi Tahmini")
+                is_normal = dx_label.lower().startswith("normal")
+                d1, d2 = st.columns([1, 2])
+                if is_normal:
+                    d1.success(f"**{dx_label}**")
+                else:
+                    d1.error(f"**{dx_label}**")
+                d2.caption(
+                    f"Model {len(disease_bundle['classes'])} kategori arasından seçim yaptı "
+                    f"(test accuracy ≈ {disease_bundle['accuracy']:.1%})."
+                )
+
+                st.markdown("**En olası 3 kategori:**")
+                for label, p in top3:
+                    st.write(f"- `{label}` — {p:.1%}")
+                    st.progress(min(max(p, 0.0), 1.0))
+        else:
+            st.info(
+                "Hastalık sınıflandırıcı bulunamadı. "
+                "`python3 train_models.py` ile yeniden eğitin."
+            )
+
+        with st.expander("Modele giden ham girdi"):
+            st.json(input_dict)
 
 
 if __name__ == "__main__":

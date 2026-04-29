@@ -195,6 +195,70 @@ def main():
             "cv_std": eval_res.cv_std,
         }
 
+    # ================================================================
+    # 6. Hastalık Sınıflandırıcı (Multi-class) — disease_category
+    # ================================================================
+    print(f"\n[6/6] Hastalık (disease_category) sınıflandırıcı eğitiliyor...")
+    from sklearn.preprocessing import LabelEncoder, StandardScaler
+    from sklearn.model_selection import train_test_split as _tts
+    from xgboost import XGBClassifier
+
+    df_dx = raw_df.copy()
+    # Aynı leakage/id sütunlarını çıkar AMA disease_category'yi hedef olarak tut
+    drop_cols = [c for c in loader.leakage_cols + loader.id_cols
+                 if c in df_dx.columns and c != "disease_category"]
+    drop_cols += ["anomaly_label"]
+    df_dx = df_dx.drop(columns=drop_cols)
+    df_dx = df_dx.dropna(subset=["disease_category"])
+
+    y_dx_raw = df_dx["disease_category"]
+    X_dx = df_dx.drop(columns=["disease_category"])
+
+    cat_cols_dx = X_dx.select_dtypes(include=["object"]).columns.tolist()
+    X_dx = pd.get_dummies(X_dx, columns=cat_cols_dx, drop_first=True).astype(float)
+
+    le_dx = LabelEncoder()
+    y_dx = le_dx.fit_transform(y_dx_raw)
+
+    X_dx_tr, X_dx_te, y_dx_tr, y_dx_te = _tts(
+        X_dx, y_dx, test_size=0.2, random_state=RANDOM_STATE, stratify=y_dx,
+    )
+
+    num_cols_dx = X_dx_tr.select_dtypes(include=["number"]).columns.tolist()
+    # Tüm sütunlar zaten float; one-hot olanları scale'lemek istemiyoruz → orijinal sayısal
+    orig_num = [c for c in num_cols_dx if c in df_dx.select_dtypes(include=["number"]).columns]
+    scaler_dx = StandardScaler()
+    X_dx_tr[orig_num] = scaler_dx.fit_transform(X_dx_tr[orig_num])
+    X_dx_te[orig_num] = scaler_dx.transform(X_dx_te[orig_num])
+
+    dx_model = XGBClassifier(
+        n_estimators=300, max_depth=6, learning_rate=0.1,
+        subsample=0.8, colsample_bytree=0.8,
+        objective="multi:softprob", num_class=len(le_dx.classes_),
+        eval_metric="mlogloss", random_state=RANDOM_STATE,
+        verbosity=0, nthread=1,
+    )
+    dx_model.fit(X_dx_tr, y_dx_tr)
+    dx_acc = float((dx_model.predict(X_dx_te) == y_dx_te).mean())
+    print(f"  ✓ Hastalık modeli eğitildi — Accuracy: {dx_acc:.4f}")
+    print(f"    Sınıflar: {list(le_dx.classes_)}")
+
+    disease_bundle = {
+        "model": dx_model,
+        "scaler": scaler_dx,
+        "feature_names": X_dx_tr.columns.tolist(),
+        "numerical_cols": orig_num,
+        "label_encoder": le_dx,
+        "classes": list(le_dx.classes_),
+        "accuracy": dx_acc,
+    }
+    disease_path = os.path.join(SAVE_DIR, "disease_classifier.joblib")
+    joblib.dump(disease_bundle, disease_path)
+    print(f"  ✓ Hastalık modeli → {disease_path}")
+
+    metadata["disease_classes"] = list(le_dx.classes_)
+    metadata["disease_accuracy"] = dx_acc
+
     metadata_path = os.path.join(SAVE_DIR, "metadata.joblib")
     joblib.dump(metadata, metadata_path)
     print(f"  ✓ Metadata → {metadata_path}")
