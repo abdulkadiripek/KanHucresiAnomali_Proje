@@ -1,1059 +1,459 @@
 """
-=============================================================================
-🩸 Blood Cell Anomaly Detection — Modern Streamlit Dashboard
-=============================================================================
-Klasik Makine Öğrenmesi algoritmaları ile kan hücresi anomalilerini tespit
-eden production-grade interaktif dashboard.
+🩸 Kan Hücresi Anomali Tespiti — Streamlit Dashboard
+====================================================
+6 sekmeli arayüz: Veri Seti, EDA, Eğitim, Sonuçlar, Açıklanabilirlik,
+Manuel Tahmin.
 
-Özellikler:
-  - 8 farklı ML algoritması desteği
-  - StratifiedKFold cross-validation
-  - RandomizedSearchCV hyperparameter tuning
-  - SMOTE desteği (imbalanced data)
-  - Feature importance & mutual information
-  - ROC & Precision-Recall curve
-  - Model persistence (kaydet/yükle)
-  - Modüler class-based mimari
-
-Derin öğrenme KULLANILMAMISTIR. Sadece klasik ML.
-
-Çalıştırmak için:  streamlit run app.py
-=============================================================================
+Tüm ML mantığı `anomaly_detection.py` içinde.
 """
 
 import os
 import warnings
-import numpy as np
-import pandas as pd
+import joblib
 import matplotlib.pyplot as plt
-import matplotlib
 import streamlit as st
 
-from core import DataLoader, Evaluator, Visualizer, Explainer
+import anomaly_detection as ad
 
 warnings.filterwarnings("ignore")
-matplotlib.use("Agg")
 
-# ============================================================================
-# SAYFA AYARLARI
-# ============================================================================
+# ---------------------------------------------------------------------------
+# Ayarlar
+# ---------------------------------------------------------------------------
 st.set_page_config(
     page_title="Kan Hücresi Anomali Tespiti",
-    page_icon="🧬",
+    page_icon="🩸",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# ============================================================================
-# MODERN CSS — Premium Glassmorphism Dark Theme
-# ============================================================================
 st.markdown("""
 <style>
-    /* ========== PREMIUM GLASS & NEON DASHBOARD THEME ========== */
-    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
-    
-    html, body, [class*="css"] {
-        font-family: 'Outfit', sans-serif;
-    }
-    
-    /* Deep premium background */
-    .stApp {
-        background: linear-gradient(145deg, #0f172a 0%, #020617 100%);
-    }
-    
-    .block-container {
-        padding-top: 2rem !important;
-        max-width: 1300px; 
-    }
-
-    /* Vibrant Crisp Headers */
-    h1 {
-        font-weight: 700 !important;
-        background: linear-gradient(135deg, #38bdf8, #818cf8);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        font-size: 2.8rem !important;
-        letter-spacing: -0.5px;
-    }
-    
-    h2 {
-        color: #f8fafc !important;
-        font-weight: 600 !important;
-        border-bottom: 2px solid rgba(56, 189, 248, 0.2);
-        padding-bottom: 8px;
-    }
-
-    h3 {
-        color: #94a3b8 !important;
-        font-weight: 500 !important;
-    }
-    
-    /* Sexy Metric Cards */
+    .stApp { background: linear-gradient(145deg, #0f172a 0%, #020617 100%); }
+    .block-container { padding-top: 2rem !important; max-width: 1300px; }
+    h1, h2, h3 { color: #f8fafc; }
+    h2 { border-bottom: 2px solid rgba(56,189,248,0.2); padding-bottom: 8px; }
     div[data-testid="stMetric"] {
-        background: rgba(30, 41, 59, 0.7);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-        border: 1px solid rgba(255, 255, 255, 0.05);
-        border-radius: 16px;
-        padding: 20px;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-        transition: all 0.3s ease;
-    }
-    div[data-testid="stMetric"]:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 8px 30px rgba(56, 189, 248, 0.15);
-        border-color: rgba(56, 189, 248, 0.3);
-    }
-    div[data-testid="stMetricValue"] {
-        font-weight: 700 !important;
-        font-size: 2.2rem !important;
-        background: linear-gradient(to right, #38bdf8, #c084fc);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-    }
-    div[data-testid="stMetricLabel"] {
-        color: #94a3b8 !important;
-        font-weight: 500 !important;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        font-size: 0.8rem !important;
-    }
-    
-    /* Glowing Buttons */
-    .stButton > button {
-        border-radius: 12px !important;
-        font-weight: 600 !important;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-        letter-spacing: 0.5px;
-        border: 1px solid rgba(255,255,255,0.1) !important;
-    }
-    .stButton > button[data-testid="baseButton-primary"] {
-        background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%) !important;
-        color: white !important;
-        border: none !important;
-        box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4) !important;
-    }
-    .stButton > button[data-testid="baseButton-primary"]:hover {
-        transform: translateY(-2px) scale(1.02);
-        box-shadow: 0 8px 25px rgba(139, 92, 246, 0.6) !important;
-    }
-    
-    /* Sidebar styling */
-    section[data-testid="stSidebar"] {
-        background: rgba(15, 23, 42, 0.95) !important;
-        backdrop-filter: blur(20px);
-        border-right: 1px solid rgba(255, 255, 255, 0.05);
-    }
-    
-    /* Input widgets styling */
-    .stSelectbox [data-baseweb="select"] > div,
-    .stMultiSelect [data-baseweb="select"] > div {
-        background-color: rgba(30, 41, 59, 0.8) !important;
-        border: 1px solid rgba(255, 255, 255, 0.1) !important;
-        border-radius: 10px !important;
-        color: white !important;
-    }
-    
-    /* Tabs minimalism */
-    .stTabs [data-baseweb="tab-list"] {
-        background: rgba(30, 41, 59, 0.5);
-        border-radius: 12px;
-        padding: 5px;
-    }
-    .stTabs [data-baseweb="tab"] {
-        font-size: 0.95rem;
-        color: #94a3b8;
-        font-weight: 500;
-        border-radius: 8px;
-        transition: all 0.2s ease;
-    }
-    .stTabs [aria-selected="true"] {
-        background: linear-gradient(135deg, #38bdf8, #3b82f6) !important;
-        color: white !important;
-        box-shadow: 0 2px 10px rgba(56, 189, 248, 0.3);
-    }
-    
-    /* Dataframes */
-    .stDataFrame {
+        background: rgba(30,41,59,0.7);
         border: 1px solid rgba(255,255,255,0.05);
-        border-radius: 12px;
-        overflow: hidden;
+        border-radius: 12px; padding: 16px;
+    }
+    section[data-testid="stSidebar"] {
+        background: rgba(15,23,42,0.95) !important;
     }
 </style>
 """, unsafe_allow_html=True)
 
-
-# ============================================================================
-# CONSTANTS
-# ============================================================================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "archive")
 MODELS_DIR = os.path.join(BASE_DIR, "saved_models")
 
 
-# ============================================================================
-# MODEL YÜKLEME
-# ============================================================================
+# ---------------------------------------------------------------------------
+# Yükleme
+# ---------------------------------------------------------------------------
 @st.cache_resource
-def load_saved_models():
-    """Kaydedilmiş modelleri ve metadata'yı yükle."""
-    import joblib
-
-    metadata_path = os.path.join(MODELS_DIR, "metadata.joblib")
-    if not os.path.exists(metadata_path):
+def load_saved():
+    meta_path = os.path.join(MODELS_DIR, "metadata.joblib")
+    if not os.path.exists(meta_path):
         return None
-
-    metadata = joblib.load(metadata_path)
-
-    # Model dosyalarını yükle
-    models = {}
-    for name in metadata["model_names"]:
-        safe_name = name.lower().replace(" ", "_").replace("(", "").replace(")", "")
-        model_path = os.path.join(MODELS_DIR, f"{safe_name}.joblib")
-        if os.path.exists(model_path):
-            models[name] = joblib.load(model_path)
-
-    metadata["models"] = models
-
-    # Preprocessor (scaler + feature_names) — manuel tahmin için gerekli
-    preprocessor_path = os.path.join(MODELS_DIR, "preprocessor.joblib")
-    if os.path.exists(preprocessor_path):
-        metadata["preprocessor"] = joblib.load(preprocessor_path)
-
-    # Hastalık sınıflandırıcı (multi-class)
-    disease_path = os.path.join(MODELS_DIR, "disease_classifier.joblib")
-    if os.path.exists(disease_path):
-        metadata["disease"] = joblib.load(disease_path)
-
-    return metadata
+    meta = joblib.load(meta_path)
+    meta["models"] = {}
+    for name in meta["model_names"]:
+        p = os.path.join(MODELS_DIR, f"{name.lower().replace(' ', '_')}.joblib")
+        if os.path.exists(p):
+            meta["models"][name] = joblib.load(p)
+    pre_p = os.path.join(MODELS_DIR, "preprocessor.joblib")
+    if os.path.exists(pre_p):
+        meta["preprocessor"] = joblib.load(pre_p)
+    dx_p = os.path.join(MODELS_DIR, "disease_classifier.joblib")
+    if os.path.exists(dx_p):
+        meta["disease"] = joblib.load(dx_p)
+    return meta
 
 
-# ============================================================================
-# ANA UYGULAMA
-# ============================================================================
-def main():
-    # Modüler bileşenler
-    loader = DataLoader(data_dir=DATA_DIR)
-    viz = Visualizer()
+@st.cache_data
+def load_raw():
+    return ad.load_data(DATA_DIR)
 
-    # Kaydedilmiş modelleri yükle
-    saved = load_saved_models()
-    models_loaded = saved is not None and len(saved.get("models", {})) > 0
 
-    # ------------------------------------------------------------------
-    # SIDEBAR — sadeleştirilmiş
-    # ------------------------------------------------------------------
-    with st.sidebar:
-        st.markdown("## 🩸 Kan Hücresi Anomali Tespiti")
-        st.markdown("---")
+# ---------------------------------------------------------------------------
+# Sayfalar
+# ---------------------------------------------------------------------------
+def page_dataset(raw_df):
+    st.markdown("### 📋 Veri Seti Genel Bakış")
+    s = ad.get_summary(raw_df)
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Satır", f"{s['n_rows']:,}")
+    c2.metric("Sütun", f"{s['n_cols']}")
+    c3.metric("Anomali", f"{s['n_anomalies']:,}")
+    c4.metric("Anomali Oranı", f"{s['anomaly_ratio']:.1%}")
 
-        page = st.radio(
-            "Sayfa Seçin",
-            [
-                "📋 Veri Seti",
-                "📊 Keşifsel Analiz",
-                "🤖 Eğitim",
-                "📈 Sonuçlar",
-                "🧠 Açıklanabilirlik",
-                "🔬 Manuel Tahmin",
-            ],
-            label_visibility="collapsed",
-        )
+    c5, c6, c7, c8 = st.columns(4)
+    c5.metric("Eksik Değer", f"{s['missing_values']}")
+    c6.metric("Duplikasyon", f"{s['duplicate_rows']}")
+    c7.metric("Sayısal", f"{raw_df.select_dtypes(include='number').shape[1]}")
+    c8.metric("Kategorik", f"{raw_df.select_dtypes(include='object').shape[1]}")
 
-        st.markdown("---")
+    st.markdown("#### 🔍 İlk 10 Satır")
+    st.dataframe(raw_df.head(10), use_container_width=True, height=300)
 
-        if models_loaded:
-            best = saved.get("best_model", "?")
-            best_f1 = saved["eval_results"].get(best, {}).get("f1", 0)
-            st.success(f"🏆 **{best}**  \nF1: `{best_f1:.4f}`")
-        else:
-            st.error("Model bulunamadı.  \n`python3 train_models.py`")
-
-        st.markdown("---")
-        st.caption("Klasik ML · Derin Öğrenme Yok")
-
-    # ------------------------------------------------------------------
-    # ANA İÇERİK — HEADER
-    # ------------------------------------------------------------------
-    st.markdown("## 🩸 Kan Hücresi Anomali Tespiti")
-    st.caption("✨ Klasik ML · Modüler Mimari · Cross-Validation · Production-Grade")
-
-    st.markdown(
-        "Klasik Makine Öğrenmesi ile kan hücrelerindeki anomalileri tespit eden "
-        "production-grade dashboard. Derin öğrenme kullanılmamıştır."
+    st.markdown("#### 🧹 Çıkarılan Sütunlar (Leakage + ID)")
+    st.warning(
+        "Eğitim öncesi şu sütunlar çıkarıldı:  \n"
+        f"- **Leakage:** {', '.join(ad.LEAKAGE_COLS)}  \n"
+        f"- **ID:** {', '.join(ad.ID_COLS)}"
     )
 
-    # Veri yükle
-    raw_df = loader.load()
-    summary = loader.get_summary(raw_df)
-
-    # ==================================================================
-    # SAYFA İÇERİKLERİ — sidebar radio'ya göre
-    # ==================================================================
-
-    if page == "📋 Veri Seti":
-        st.markdown("### 📋 Veri Seti Genel Bakış")
-
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Toplam Satır", f"{summary['n_rows']:,}")
-        c2.metric("Toplam Sütun", f"{summary['n_cols']}")
-        c3.metric("Anomali Sayısı", f"{summary['n_anomalies']:,}")
-        c4.metric("Anomali Oranı", f"{summary['anomaly_ratio']:.1%}")
-
-        # Ek metrikler
-        c5, c6, c7, c8 = st.columns(4)
-        c5.metric("Eksik Değer", f"{summary['missing_values']}")
-        c6.metric("Tekrar Eden Satır", f"{summary['duplicate_rows']}")
-        num_count = raw_df.select_dtypes(include=["number"]).shape[1]
-        cat_count = raw_df.select_dtypes(include=["object"]).shape[1]
-        c7.metric("Sayısal Özellik", f"{num_count}")
-        c8.metric("Kategorik Özellik", f"{cat_count}")
-
-        st.markdown("### 🔍 İlk 10 Satır")
-        st.dataframe(raw_df.head(10), width="stretch", height=400)
-
-        st.markdown("### 📊 Sütun Detayları")
-        col_info = loader.get_column_info(raw_df)
-        st.dataframe(col_info, width="stretch", height=400)
-
-        st.markdown("### 🧹 Kaldırılacak Sütunlar")
-        st.warning(
-            "**🛡️ Data Leakage Önlemi** — Eğitimden çıkarılan sütunlar:\n"
-            "* **cell_id, cell_type, disease_category**: Doğrudan hedef ile ilişkili veya kimlik.\n"
-            "* **cytodiffusion_anomaly_score, cytodiffusion_classification_confidence, labeller_confidence_score**: Anomali sızıntıları."
-        )
-
-        st.markdown("### 📈 Temel İstatistikler")
-        clean_df_stats = loader.clean(raw_df.copy())
-        st.dataframe(
-            clean_df_stats.describe().T.style.format("{:.3f}"),
-            width="stretch",
-            height=400,
-        )
-
-    # ==================================================================
-    # TAB 2 — EDA
-    # ==================================================================
-    elif page == "📊 Keşifsel Analiz":
-        st.markdown("### 📊 Keşifsel Veri Analizi")
-        st.caption(
-            "Her grafik bir tasarım kararını kanıtlar. Özellikler kullanıcı tarafından "
-            "değil, **istatistiksel kriterlere göre veri tarafından** seçilmiştir."
-        )
-
-        df_clean = loader.clean(raw_df.copy())
-
-        # ----- GRAFİK 1: Leakage Kanıtı -----
-        st.markdown("#### 1️⃣ Veri Sızıntısı (Data Leakage) Kanıtı")
-        st.markdown(
-            "**Soru:** Hangi sütunları neden modelden çıkardık?  \n"
-            "**Yöntem:** Tüm sayısal sütunların `anomaly_label` ile mutlak Pearson korelasyonu."
-        )
-        leakage_all = loader.leakage_cols + loader.id_cols
-        fig_leak = viz.plot_leakage_evidence(
-            raw_df, target_col="anomaly_label", leakage_cols=leakage_all,
-        )
-        st.pyplot(fig_leak)
-        plt.close()
-        st.info(
-            "**Yorum:** `cytodiffusion_anomaly_score` ve `labeller_confidence_score` "
-            "hedef değişkenle çok yüksek korelasyona sahip — bunlar başka bir modelin/uzmanın "
-            "etiketleme sürecinden gelen bilgilerdir. Modele dahil edilseydi gerçek genelleme "
-            "değil **leakage** ölçerdik. Bu yüzden eğitime alınmadılar."
-        )
-
-        st.markdown("---")
-
-        # ----- GRAFİK 2: Sınıf Dengesizliği -----
-        st.markdown("#### 2️⃣ Sınıf Dengesizliği")
-        st.markdown(
-            "**Soru:** Veri ne kadar dengesiz? Bu, tasarım seçimlerini nasıl etkiliyor?"
-        )
-        col_donut, col_text = st.columns([1.2, 1])
-        with col_donut:
-            fig_donut = viz.plot_class_imbalance_donut(raw_df["anomaly_label"])
-            st.pyplot(fig_donut)
-            plt.close()
-        with col_text:
-            anomaly_pct = raw_df["anomaly_label"].mean() * 100
-            st.markdown(
-                f"**Anomali oranı: %{anomaly_pct:.1f}**  \n\n"
-                "**Tasarım kararları:**  \n"
-                "🔹 **`stratify=y`** — Train/test split sınıf oranını koruyacak şekilde yapılır.  \n"
-                "🔹 **F1-Score** birincil metrik — Accuracy dengesiz veride yanıltıcıdır.  \n"
-                "🔹 **SMOTE opsiyonel** — Azınlık sınıfı için sentetik örnekleme (sidebar'dan açılabilir).  \n"
-                "🔹 **Class-balanced metrikler** — Balanced Accuracy, MCC, Cohen's Kappa raporlanır."
-            )
-
-        st.markdown("---")
-
-        # ----- GRAFİK 3: Cohen's d ile Top Özellikler -----
-        st.markdown("#### 3️⃣ En Ayırt Edici Özellikler — Cohen's d Etki Büyüklüğü")
-        st.markdown(
-            "**Soru:** Hangi özellikler Normal ile Anomali arasında en güçlü farkı yaratıyor?  \n"
-            "**Yöntem:** Her sayısal özellik için iki sınıfın ortalamaları arasındaki "
-            "**standardize edilmiş farkı** (Cohen's d) hesapladık. "
-            "Eşikler: 0.2 küçük · 0.5 orta · 0.8 büyük etki."
-        )
-        fig_cohen, top_features = viz.plot_cohens_d_top_features(
-            df_clean, target_col="anomaly_label", top_n=10,
-        )
-        st.pyplot(fig_cohen)
-        plt.close()
-        if top_features:
-            top_3_str = ", ".join(f"`{f}`" for f in top_features[:3])
-            st.info(
-                f"**Yorum:** En güçlü ayrım sinyalleri {top_3_str} özelliklerinden geliyor. "
-                "Bu liste subjektif değil — tüm sayısal özellikler tarandı, etki büyüklüğüne göre "
-                "otomatik sıralandı. Modelin hangi sinyallerden öğrendiğini istatistiksel olarak öngörüyoruz."
-            )
-
-        st.markdown("---")
-
-        # ----- GRAFİK 4: Top 4 Özellik için KDE Dağılımı -----
-        st.markdown("#### 4️⃣ Top 4 Özelliğin Sınıf Bazlı Yoğunluk Dağılımı")
-        st.markdown(
-            "**Soru:** Cohen's d'ye göre seçilen top özelliklerde sınıflar gerçekten ayrışıyor mu?  \n"
-            "**Yöntem:** Yukarıdaki listenin **ilk 4 özelliği** için KDE (yoğunluk eğrisi). "
-            "İki dağılım ne kadar az örtüşüyorsa, model o özellikten o kadar bilgi çıkarabilir."
-        )
-        top_4 = top_features[:4] if top_features else []
-        if top_4:
-            fig_kde = viz.plot_top_features_kde(
-                df_clean, features=top_4, target_col="anomaly_label",
-            )
-            if fig_kde is not None:
-                st.pyplot(fig_kde)
-                plt.close()
-            st.success(
-                "**Yorum:** Mavi (Normal) ve kırmızı (Anomali) yoğunlukları belirgin biçimde "
-                "kayık → klasik ML algoritmaları (XGBoost, RF, LightGBM) bu özelliklerdeki "
-                "eşikleri öğrenerek başarılı sınıflandırma yapabilir. Tam örtüşme olsaydı "
-                "model bu özellikten faydalanamazdı."
-            )
-
-        st.markdown("---")
-
-        # ----- GRAFİK 5: Kategorik Bias Kontrolü -----
-        st.markdown("#### 5️⃣ Kategorik Özelliklerde Anomali Oranı — Bias Kontrolü")
-        st.markdown(
-            "**Soru:** Anomaliler bazı klinik gruplara veya teknik koşullara göre yoğunlaşıyor mu?  \n"
-            "**Yöntem:** Her kategorik sütun için kategori bazında anomali oranını "
-            "**genel baseline** ile karşılaştırdık. Sapma > %5 ise renkli işaretlendi."
-        )
-        # Kategorik sütunlar — leakage olanlar zaten df_clean'de yok
-        cat_candidates = [
-            "patient_age_group", "patient_sex",
-            "dataset_source", "staining_protocol",
-            "microscope_model", "magnification_x", "image_resolution_px",
-        ]
-        cat_cols_present = [c for c in cat_candidates if c in df_clean.columns]
-        if cat_cols_present:
-            # Bias özet tablosu
-            bias_df = viz.compute_categorical_bias_summary(
-                df_clean, cat_cols_present, target_col="anomaly_label",
-            )
-            st.markdown("**📋 Bias Özeti (yelpaze = max kategori − min kategori anomali oranı)**")
-            st.dataframe(
-                bias_df.style.format({"Yelpaze (max-min)": "{:.1%}"}),
-                width="stretch", hide_index=True,
-            )
-
-            # Grafik
-            fig_bias = viz.plot_categorical_bias(
-                df_clean, cat_cols_present, target_col="anomaly_label",
-            )
-            if fig_bias is not None:
-                st.pyplot(fig_bias)
-                plt.close()
-
-            # Otomatik yorum: en yüksek yelpazeli sütun
-            top_bias = bias_df.iloc[0]
-            top_col = top_bias["Sütun"]
-            top_spread = top_bias["Yelpaze (max-min)"]
-
-            if top_spread < 0.05:
-                interpretation = (
-                    f"**Yorum:** Hiçbir kategorik sütunda anomali oranı belirgin sapma "
-                    f"göstermiyor (en yüksek yelpaze: `{top_col}`, %{top_spread:.1%}). "
-                    "→ **İyi haber:** Klinik veya teknik bias yok, model genelleyebilir."
-                )
-            else:
-                interpretation = (
-                    f"**Yorum:** En yüksek sapma `{top_col}` sütununda "
-                    f"(%{top_spread:.1%} yelpaze) — yani bu kategorik sütunun "
-                    f"alt grupları arasında anomali oranı belirgin biçimde değişiyor. "
-                )
-                # Klinik mi teknik mi yorumla
-                if top_col in ("patient_age_group", "patient_sex"):
-                    interpretation += (
-                        "Bu **klinik anlamlı** bir sinyal olabilir (örn. yaşlılarda hematolojik "
-                        "hastalık daha yaygındır). Modelin yakaladığı sinyal tıbbi gerçeklikle uyumlu."
-                    )
-                else:
-                    interpretation += (
-                        "Bu **teknik bir bias** olabilir (örn. bir veri kaynağında anomali "
-                        "örneklerinin daha fazla toplanmış olması — batch effect). "
-                        "Model bu sütunu sinyal olarak kullanabilir, dikkat edilmeli."
-                    )
-            st.info(interpretation)
-
-    # ==================================================================
-    # TAB 3 — EĞİTİM
-    # ==================================================================
-    elif page == "🤖 Eğitim":
-        st.markdown("### 🤖 Model Eğitimi")
-
-        if not models_loaded:
-            st.error(
-                "Eğitilmiş model bulunamadı. Terminalde şu komutu çalıştırın:  \n"
-                "```\npython3 train_models.py\n```"
-            )
-            return
-
-        st.success(
-            f"✅ **{len(saved['models'])} model** önceden eğitildi ve yüklendi. "
-            "Eğitim sırasında `RandomizedSearchCV` ile hyperparameter optimizasyonu "
-            "ve `5-Fold StratifiedKFold` cross-validation uygulanmıştır."
-        )
-
-        # Pipeline adımları
-        st.markdown("#### 📝 Uygulanan Pipeline")
-        st.markdown(
-            "1. **Veri Temizleme** — Leakage ve kimlik sütunları kaldırıldı (EDA'da kanıtlandı).  \n"
-            "2. **One-Hot Encoding** — Kategorik değişkenler sayısallaştırıldı (`pd.get_dummies`).  \n"
-            "3. **Train/Test Split** — %80/%20 oranında, `stratify=y` ile sınıf dengesi korundu.  \n"
-            "4. **StandardScaler** — Sayısal sütunlar ölçeklendi (sadece train üzerinde fit).  \n"
-            "5. **RandomizedSearchCV** — Her model için 20 iterasyonla en iyi hiperparametreler arandı.  \n"
-            "6. **5-Fold CV** — StratifiedKFold cross-validation ile genelleme yeteneği test edildi."
-        )
-
-        st.markdown("---")
-
-        # Model detayları
-        st.markdown("#### 📊 Eğitilen Modeller")
-        for name in saved["model_names"]:
-            eval_info = saved["eval_results"].get(name, {})
-            train_info = saved["train_results"].get(name, {})
-            is_best = (name == saved.get("best_model"))
-
-            title = f"🏆 {name}" if is_best else f"✅ {name}"
-            with st.expander(title, expanded=is_best):
-                m1, m2, m3, m4 = st.columns(4)
-                m1.metric("Accuracy", f"{eval_info.get('accuracy', 0):.4f}")
-                m2.metric("Precision", f"{eval_info.get('precision', 0):.4f}")
-                m3.metric("Recall", f"{eval_info.get('recall', 0):.4f}")
-                m4.metric("F1-Score", f"{eval_info.get('f1', 0):.4f}")
-
-                m5, m6, m7, m8 = st.columns(4)
-                m5.metric("MCC", f"{eval_info.get('mcc', 0):.4f}")
-                m6.metric("Kappa", f"{eval_info.get('kappa', 0):.4f}")
-                roc = eval_info.get("roc_auc")
-                if roc is not None:
-                    m7.metric("ROC-AUC", f"{roc:.4f}")
-                cv_mean = train_info.get("cv_mean")
-                if cv_mean is not None:
-                    cv_std = train_info.get("cv_std")
-                    cv_text = f"{cv_mean:.4f} ± {cv_std:.4f}" if cv_std else f"{cv_mean:.4f}"
-                    m8.metric("CV Mean (F1)", cv_text)
-
-                best_params = train_info.get("best_params")
-                if best_params:
-                    st.markdown("**En İyi Hiperparametreler:**")
-                    st.json(best_params)
-
-        st.markdown("---")
-        st.markdown("#### 🧬 Neden Bu 3 Model?")
-        st.markdown(
-            "| Model | Paradigma | Neden Seçildi? |\n"
-            "|---|---|---|\n"
-            "| **XGBoost** | Boosting (level-wise) | Tabular veri için endüstri standardı, en yüksek performans |\n"
-            "| **LightGBM** | Boosting (leaf-wise) | Farklı boosting stratejisi, sağlamlık doğrulaması |\n"
-            "| **Random Forest** | Bagging | Farklı paradigma, overfitting direnci, sanity check |"
-        )
-
-    # ==================================================================
-    # TAB 4 — SONUÇLAR
-    # ==================================================================
-    elif page == "📈 Sonuçlar":
-        st.markdown("### 📈 Detaylı Sonuçlar ve Karşılaştırma")
-
-        if not models_loaded:
-            st.info("Model bulunamadı. Terminalde `python3 train_models.py` çalıştırın.")
-            return
-
-        eval_results = saved["eval_results"]
-        y_test = saved["y_test"]
-        feature_names = saved["feature_names"]
-        comp_df = saved["comparison_table"]
-        models = saved["models"]
-        train_info = saved["train_results"]
-
-        best_name = saved["best_model"]
-        best_eval = eval_results[best_name]
-
-        st.success(
-            f"**🏆 En İyi Model: {best_name}**  \n"
-            f"F1-Score: `{best_eval['f1']:.4f}` · "
-            f"Accuracy: `{best_eval['accuracy']:.4f}` · "
-            f"MCC: `{best_eval['mcc']:.4f}`"
-        )
-
-        # Karşılaştırma tablosu
-        st.markdown("#### 📋 Karşılaştırma Tablosu")
-        st.dataframe(
-            comp_df.style.format("{:.4f}").highlight_max(axis=0, color="#e94560"),
-            width="stretch",
-        )
-
-        # Metrik karşılaştırma grafiği
-        st.markdown("#### 📊 Performans Karşılaştırması")
-        fig_comp = viz.plot_metric_comparison(comp_df)
-        if fig_comp:
-            st.pyplot(fig_comp)
-            plt.close()
-
-        # Confusion Matrix — en iyi model
-        st.markdown(f"#### 🔲 Confusion Matrix — {best_name}")
-        best_y_pred = train_info[best_name]["y_pred"]
-        fig_cm = viz.plot_confusion_matrix(
-            y_test, best_y_pred, best_name, best_eval["f1"],
-        )
-        st.pyplot(fig_cm)
-        plt.close()
-
-        # Confusion matrix yorumu
-        from sklearn.metrics import confusion_matrix as _cm_func
-        cm = _cm_func(y_test, best_y_pred)
-        tn, fp, fn, tp = cm.ravel()
-        st.info(
-            f"**Yorum:**  \n"
-            f"- **TP = {tp}** anomali doğru yakalandı  \n"
-            f"- **TN = {tn}** normal doğru tanındı  \n"
-            f"- **FP = {fp}** normal yanlışlıkla anomali etiketlendi (Tip I hata)  \n"
-            f"- **FN = {fn}** anomali kaçırıldı (Tip II hata — klinik açıdan daha kritik)  \n"
-            f"- Model anomalilerin **%{tp/(tp+fn)*100:.1f}**'ini yakaladı (Recall)."
-        )
-
-        # ROC Curve
-        st.markdown("#### 📉 ROC Curve")
-        evaluator = Evaluator()
-        roc_data = {}
-        for name in saved["model_names"]:
-            y_proba = train_info[name].get("y_proba")
-            if y_proba is not None:
-                fpr, tpr, roc_auc_val = evaluator.get_roc_data(y_test, y_proba)
-                roc_data[name] = (fpr, tpr, roc_auc_val)
-        if roc_data:
-            fig_roc = viz.plot_roc_curves(roc_data)
-            st.pyplot(fig_roc)
-            plt.close()
-            st.info(
-                "**Yorum:** ROC eğrisi sol üst köşeye ne kadar yakınsa model o kadar iyi. "
-                "AUC = 1.0 mükemmel ayrım, AUC = 0.5 rastgele tahmin. "
-                f"En iyi modelimizin AUC'si **{eval_results[best_name].get('roc_auc', 0):.4f}** "
-                "— neredeyse mükemmel ayrım."
-            )
-
-        # Precision-Recall Curve
-        st.markdown("#### 📈 Precision-Recall Curve")
-        pr_data = {}
-        for name in saved["model_names"]:
-            y_proba = train_info[name].get("y_proba")
-            if y_proba is not None:
-                prec_arr, rec_arr, pr_auc_val = evaluator.get_pr_data(y_test, y_proba)
-                pr_data[name] = (prec_arr, rec_arr, pr_auc_val)
-        if pr_data:
-            fig_pr = viz.plot_pr_curves(pr_data)
-            st.pyplot(fig_pr)
-            plt.close()
-            st.info(
-                "**Yorum:** Precision-Recall eğrisi, dengesiz veri setlerinde ROC'tan daha güvenilirdir. "
-                "Yüksek AP (Average Precision) skoru, modelin hem yüksek precision hem yüksek recall "
-                "yakalayabildiğini gösterir."
-            )
-
-        # Feature Importance
-        st.markdown("#### 🔍 Özellik Önemleri")
-        fi_model_name = st.selectbox("Model Seçin:", list(models.keys()), key="fi_select")
-        fig_fi = viz.plot_feature_importance(
-            models[fi_model_name], feature_names, fi_model_name,
-        )
-        if fig_fi:
-            st.pyplot(fig_fi)
-            plt.close()
-        else:
-            st.warning("Bu model için feature importance bilgisi mevcut değil.")
-
-        # Classification Report
-        st.markdown("#### 📝 Sınıflandırma Raporu")
-        cr_model = st.selectbox("Model Seçin:", list(eval_results.keys()), key="cr_select")
-        st.code(eval_results[cr_model]["classification_rep"], language="text")
-
-        # Sonuç özeti
-        st.markdown("---")
-        st.info(
-            f"**📝 Sonuç Özeti:**  \n"
-            f"Eğitilen 3 model içerisinde en yüksek F1-Skoru **{best_name}** tarafından alınmıştır "
-            f"(F1: `{best_eval['f1']:.4f}`). Tüm modeller `RandomizedSearchCV` ile optimize edilmiş, "
-            "`5-Fold StratifiedKFold` ile çapraz doğrulanmıştır."
-        )
-
-    # ==================================================================
-    # TAB 5 — AÇIKLANABİLİRLİK (SHAP)
-    # ==================================================================
-    elif page == "🧠 Açıklanabilirlik":
-        st.markdown("### 🧠 Açıklanabilir Yapay Zeka (SHAP)")
-        st.caption(
-            "SHAP (SHapley Additive exPlanations) — oyun teorisi tabanlı, "
-            "her tahminin neden yapıldığını matematiksel olarak açıklayan yöntem."
-        )
-
-        if not models_loaded:
-            st.info("Model bulunamadı. Terminalde `python3 train_models.py` çalıştırın.")
-        else:
-            models = saved["models"]
-            y_test = saved["y_test"]
-            X_test = saved["X_test"]
-            X_train_bg = saved["X_train_sample"]
-
-            st.markdown(
-                "**SHAP nasıl çalışır?** Her özelliğin tahmine **katkı miktarını** "
-                "Shapley değerleriyle hesaplar. Pozitif değer → anomali tahminini artırır, "
-                "negatif değer → azaltır. Toplamı, modelin nihai tahminini verir."
-            )
-
-            # ---- Model seçimi ----
-            xai_model_name = st.selectbox(
-                "Açıklanacak Modeli Seçin:",
-                list(models.keys()),
-                key="xai_model_select",
-            )
-
-            selected_model = models[xai_model_name]
-
-            with st.spinner(f"SHAP değerleri hesaplanıyor — {xai_model_name}..."):
-                explainer_obj = Explainer(
-                    selected_model,
-                    X_train_bg,
-                    max_background=80,
-                )
-                shap_result = explainer_obj.compute_shap_values(
-                    X_test, max_samples=200
-                )
-
-            st.success(
-                f"✓ SHAP hesaplandı — {len(shap_result.X_sample)} örnek, "
-                f"{len(shap_result.feature_names)} özellik. "
-                f"(Explainer: `{shap_result.explainer_type}`)"
-            )
-
-            st.markdown("---")
-
-            # ==============================================================
-            # GLOBAL — BAR CHART
-            # ==============================================================
-            st.markdown("#### 1️⃣ Global Özellik Önemi (Bar Chart)")
-            st.markdown(
-                "**Soru:** Modelimiz tahmin yaparken hangi özelliklere ne kadar önem veriyor?  \n"
-                "**Yöntem:** Test setindeki tüm örnekler için her özelliğin **mutlak SHAP değerinin ortalaması**."
-            )
-            fig_bar = explainer_obj.plot_global_bar(shap_result, top_n=15)
-            st.pyplot(fig_bar)
-            plt.close()
-
-            top_5 = explainer_obj.get_top_features(shap_result, top_n=5)
-            top_5_str = ", ".join(f"`{f}`" for f in top_5)
-            st.info(
-                f"**Yorum:** Modelimiz tahminlerinde en çok {top_5_str} özelliklerine "
-                "güveniyor. Bu liste, EDA'da Cohen's d ile bulduğumuz ayırt edici "
-                "özelliklerle örtüşüyorsa modelimizin **istatistiksel olarak doğru "
-                "sinyalleri öğrendiğini** gösterir."
-            )
-
-            st.markdown("---")
-
-            # ==============================================================
-            # GLOBAL — SUMMARY (BEESWARM)
-            # ==============================================================
-            st.markdown("#### 2️⃣ Global SHAP Summary Plot (Beeswarm)")
-            st.markdown(
-                "**Soru:** Özellik değerleri yüksek/düşük olduğunda tahmin nasıl etkileniyor?  \n"
-                "**Yöntem:** Her noktanın yatay konumu **SHAP değerini** (etki yönü ve büyüklüğü), "
-                "rengi ise **özellik değerini** gösterir (kırmızı=yüksek, mavi=düşük)."
-            )
-            fig_summary = explainer_obj.plot_global_summary(shap_result, top_n=15)
-            st.pyplot(fig_summary)
-            plt.close()
-
-            st.info(
-                "**Nasıl okunur?**  \n"
-                "🔹 **Sağa giden noktalar** → o özellik anomali tahminini **artırıyor**  \n"
-                "🔹 **Sola giden noktalar** → anomali tahminini **azaltıyor**  \n"
-                "🔹 **Renk patterni:** Eğer kırmızı (yüksek değer) noktalar sürekli sağdaysa, "
-                "yüksek özellik değeri = anomali işareti. Mavi (düşük değer) noktalar sağdaysa, "
-                "düşük özellik değeri = anomali işareti."
-            )
-
-            st.markdown("---")
-
-            # ==============================================================
-            # LOKAL — WATERFALL
-            # ==============================================================
-            st.markdown("#### 3️⃣ Lokal Açıklama — Tek Bir Hücre Tahmini")
-            st.markdown(
-                "**Soru:** Tek bir hücrenin tahmininde hangi özellikler ne kadar etkili oldu?  \n"
-                "**Yöntem:** Seçilen örnek için her özelliğin SHAP katkısı."
-            )
-
-            y_sample = y_test.reset_index(drop=True)
-
-            sample_idx = st.slider(
-                "Test setindeki hücre numarası:",
-                min_value=0,
-                max_value=len(shap_result.X_sample) - 1,
-                value=0,
-                step=1,
-                help="Test setinden bir hücre seçin, modelin neden o tahmini yaptığını görelim.",
-            )
-
-            actual_label = int(y_sample.iloc[sample_idx]) if sample_idx < len(y_sample) else -1
-            x_row = shap_result.X_sample.iloc[[sample_idx]]
-            predicted = int(selected_model.predict(x_row)[0])
-            proba = None
-            if hasattr(selected_model, "predict_proba"):
-                proba = float(selected_model.predict_proba(x_row)[0, 1])
-
-            cc1, cc2, cc3 = st.columns(3)
-            cc1.metric(
-                "Gerçek Etiket",
-                "Anomali (1)" if actual_label == 1 else "Normal (0)",
-            )
-            cc2.metric(
-                "Model Tahmini",
-                "Anomali (1)" if predicted == 1 else "Normal (0)",
-                delta="Doğru" if predicted == actual_label else "Yanlış",
-                delta_color="normal" if predicted == actual_label else "inverse",
-            )
-            if proba is not None:
-                cc3.metric("Anomali Olasılığı", f"{proba:.1%}")
-
-            fig_waterfall = explainer_obj.plot_local_waterfall(
-                shap_result, sample_idx=sample_idx, top_n=12
-            )
-            st.pyplot(fig_waterfall)
-            plt.close()
-
-            st.info(
-                "**Nasıl okunur?**  \n"
-                "🔴 **Kırmızı bar (sağa)** → bu özellik değeri anomali tahminini **artırdı**  \n"
-                "🔵 **Mavi bar (sola)** → bu özellik değeri anomali tahminini **azalttı**  \n"
-                "**Baseline + SHAP toplamı = nihai tahmin** (tepedeki başlık formülü gösterir)."
-            )
-
-            st.markdown("---")
-            st.markdown(
-                "#### 🎯 Özet — SHAP'ın Değeri  \n"
-                "🔹 **Şeffaflık:** Model artık black-box değil, her tahmini açıklayabiliyoruz  \n"
-                "🔹 **Tutarlılık doğrulaması:** Modelin EDA'da bulduğumuz sinyalleri kullandığını teyit ediyoruz  \n"
-                "🔹 **Klinik güven:** Bir uzman, modelin kararını adım adım inceleyip onaylayabilir  \n"
-                "🔹 **Hata tespiti:** Yanlış tahminlerde hangi özelliklerin yanılttığını görebiliriz"
-            )
-
-    # ==================================================================
-    # TAB 6 — MANUEL TAHMİN
-    # ==================================================================
-    elif page == "🔬 Manuel Tahmin":
-        render_prediction_page(loader, saved)
-
-
-# ============================================================================
-# MANUEL TAHMİN — yardımcı fonksiyon
-# ============================================================================
-def predict_single(input_dict: dict, model, preprocessor_meta: dict) -> tuple:
-    """Tek bir kullanıcı girdisi için tahmin üretir.
-
-    Args:
-        input_dict: ham özellik adı → değer.
-        model: Eğitilmiş sklearn-uyumlu model.
-        preprocessor_meta: scaler + feature_names + numerical_cols içeren dict.
-
-    Returns:
-        (prediction:int, probability:float|None)
-    """
-    feature_names = preprocessor_meta["feature_names"]
-    numerical_cols = preprocessor_meta["numerical_cols"]
-    scaler = preprocessor_meta["scaler"]
-
-    row = pd.DataFrame([input_dict])
-
-    cat_cols = row.select_dtypes(include=["object"]).columns.tolist()
-    row = pd.get_dummies(row, columns=cat_cols, drop_first=False)
-    row = row.reindex(columns=feature_names, fill_value=0).astype(float)
-
-    num_present = [c for c in numerical_cols if c in row.columns]
-    if num_present:
-        row[num_present] = scaler.transform(row[num_present])
-
-    pred = int(model.predict(row)[0])
-    proba = None
-    if hasattr(model, "predict_proba"):
-        proba = float(model.predict_proba(row)[0, 1])
-    return pred, proba
-
-
-def predict_disease(input_dict: dict, disease_bundle: dict) -> tuple:
-    """Çoklu sınıf hastalık tahmini.
-
-    Returns:
-        (label:str, top3:list[(label, prob)])
-    """
-    feature_names = disease_bundle["feature_names"]
-    numerical_cols = disease_bundle["numerical_cols"]
-    scaler = disease_bundle["scaler"]
-    le = disease_bundle["label_encoder"]
-    model = disease_bundle["model"]
-
-    row = pd.DataFrame([input_dict])
-    cat_cols = row.select_dtypes(include=["object"]).columns.tolist()
-    row = pd.get_dummies(row, columns=cat_cols, drop_first=False)
-    row = row.reindex(columns=feature_names, fill_value=0).astype(float)
-
-    num_present = [c for c in numerical_cols if c in row.columns]
-    if num_present:
-        row[num_present] = scaler.transform(row[num_present])
-
-    proba = model.predict_proba(row)[0]
-    classes = le.classes_
-    order = np.argsort(proba)[::-1]
-    top3 = [(str(classes[i]), float(proba[i])) for i in order[:3]]
-    label = str(classes[order[0]])
-    return label, top3
-
-
-def render_prediction_page(loader: DataLoader, saved: dict):
-    """Manuel veri girişi → anomali tahmini sayfası."""
-    st.markdown("### 🔬 Manuel Tahmin — Hücre Verisini Sen Gir")
-    st.caption(
-        "Bir kan hücresinin morfolojik ve klinik ölçümlerini gir, "
-        "model anomali olup olmadığını tahmin etsin."
-    )
-
-    if saved is None or not saved.get("models"):
-        st.error("Eğitilmiş model bulunamadı. Önce `python3 train_models.py` çalıştırın.")
-        return
-
-    # Ham veriyi temizle (leakage/id sütunları çıkar) → form alanlarını üret
-    raw = loader.load()
-    df_clean = loader.clean(raw)
-    if "anomaly_label" in df_clean.columns:
-        df_features = df_clean.drop(columns=["anomaly_label"])
-    else:
-        df_features = df_clean
-
-    numerical_cols = df_features.select_dtypes(include=["number"]).columns.tolist()
-    categorical_cols = df_features.select_dtypes(include=["object"]).columns.tolist()
-
-    # Model seçimi
-    model_names = list(saved["models"].keys())
-    default_idx = model_names.index(saved["best_model"]) if saved.get("best_model") in model_names else 0
-    chosen_model_name = st.selectbox(
-        "Tahmin için model:", model_names, index=default_idx
-    )
-    model = saved["models"][chosen_model_name]
+    st.markdown("#### 📈 Temizlenmiş Veri İstatistikleri")
+    df_clean = ad.clean_data(raw_df)
+    st.dataframe(df_clean.describe().T.style.format("{:.3f}"),
+                 use_container_width=True, height=350)
+
+
+def page_eda(raw_df):
+    st.markdown("### 📊 Keşifsel Veri Analizi")
+    df_clean = ad.clean_data(raw_df)
+
+    st.markdown("#### 1️⃣ Veri Sızıntısı (Leakage) Kanıtı")
+    st.caption("Sayısal sütunların hedefe |Pearson korelasyonu|. "
+               "Kırmızı: eğitimden çıkarılanlar.")
+    fig = ad.plot_leakage_correlations(raw_df, ad.LEAKAGE_COLS + ad.ID_COLS)
+    if fig:
+        st.pyplot(fig); plt.close()
+        st.info("`cytodiffusion_anomaly_score` ve `labeller_confidence_score` "
+                "hedefle çok yüksek korelasyona sahip — başka bir model/uzman "
+                "etiketinden geliyor. Eğitime alınsaydı leakage olurdu.")
 
     st.markdown("---")
-    st.markdown("#### 📝 Girdi Değerleri")
-    st.caption("Sayısal alanlar veri setinin medyan değeri ile ön doldurulmuştur.")
+    st.markdown("#### 2️⃣ Sınıf Dengesizliği")
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        st.pyplot(ad.plot_class_balance(raw_df[ad.TARGET])); plt.close()
+    with col2:
+        ratio = raw_df[ad.TARGET].mean()
+        st.markdown(
+            f"**Anomali oranı: %{ratio*100:.1f}**  \n\n"
+            "**Tasarım:**  \n"
+            "- `stratify=y` ile train/test split  \n"
+            "- F1-Score birincil metrik (Accuracy yanıltıcı)  \n"
+            "- Balanced Accuracy, MCC, Kappa raporlanır"
+        )
 
-    with st.form("manual_predict_form"):
+    st.markdown("---")
+    st.markdown("#### 3️⃣ En Ayırt Edici Özellikler — Cohen's d")
+    st.caption("Eşikler: 0.2 küçük · 0.5 orta · 0.8 büyük etki büyüklüğü.")
+    fig, top_features = ad.plot_cohens_d_top(df_clean, top_n=10)
+    st.pyplot(fig); plt.close()
+    if top_features:
+        st.info("En güçlü ayırıcılar: " + ", ".join(f"`{f}`" for f in top_features[:3]))
+
+    st.markdown("---")
+    st.markdown("#### 4️⃣ Top 4 Özelliğin Sınıf Bazlı Dağılımı (KDE)")
+    if top_features:
+        fig = ad.plot_kde_grid(df_clean, top_features[:4])
+        if fig:
+            st.pyplot(fig); plt.close()
+            st.success("Mavi (Normal) ve kırmızı (Anomali) dağılımlarındaki "
+                       "kayma → modelin öğrenebileceği sinyal.")
+
+    st.markdown("---")
+    st.markdown("#### 5️⃣ Kategorik Bias Kontrolü")
+    cat_cols = df_clean.select_dtypes(include="object").columns.tolist()
+    if cat_cols:
+        fig = ad.plot_categorical_bias(df_clean, cat_cols)
+        if fig:
+            st.pyplot(fig); plt.close()
+            st.caption("Kırmızı çizgi: genel anomali oranı (baseline). "
+                       "Çubukların baseline'dan sapması = kategorik bias.")
+
+
+def page_training(saved):
+    st.markdown("### 🤖 Model Eğitimi")
+    if not saved or not saved.get("models"):
+        st.error("Model bulunamadı. `python3 train_models.py` çalıştırın.")
+        return
+
+    st.success(f"✅ {len(saved['models'])} model yüklendi · "
+               "5-fold StratifiedKFold CV uygulandı.")
+
+    st.markdown("#### Pipeline")
+    st.markdown(
+        "1. **Temizleme** — Leakage + ID sütunları çıkarıldı  \n"
+        "2. **One-Hot Encoding** — Kategorikler sayısal  \n"
+        "3. **Stratified Split** — %80 / %20  \n"
+        "4. **StandardScaler** — sadece train'de fit  \n"
+        "5. **5-Fold StratifiedKFold CV** — F1 skoru  \n"
+        "6. **3 model:** XGBoost, LightGBM, Random Forest"
+    )
+
+    st.markdown("---")
+    st.markdown("#### Modeller")
+    for name in saved["model_names"]:
+        ev = saved["eval_results"].get(name, {})
+        tr = saved["train_results"].get(name, {})
+        is_best = (name == saved.get("best_model"))
+        title = f"🏆 {name}" if is_best else f"✅ {name}"
+        with st.expander(title, expanded=is_best):
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("Accuracy", f"{ev.get('accuracy', 0):.4f}")
+            m2.metric("Precision", f"{ev.get('precision', 0):.4f}")
+            m3.metric("Recall", f"{ev.get('recall', 0):.4f}")
+            m4.metric("F1-Score", f"{ev.get('f1', 0):.4f}")
+            m5, m6, m7, m8 = st.columns(4)
+            m5.metric("MCC", f"{ev.get('mcc', 0):.4f}")
+            m6.metric("Kappa", f"{ev.get('kappa', 0):.4f}")
+            if ev.get("roc_auc") is not None:
+                m7.metric("ROC-AUC", f"{ev['roc_auc']:.4f}")
+            if tr.get("cv_mean") is not None:
+                m8.metric("CV Mean", f"{tr['cv_mean']:.4f} ± {tr['cv_std']:.4f}")
+
+
+def page_results(saved):
+    st.markdown("### 📈 Sonuçlar ve Karşılaştırma")
+    if not saved or not saved.get("models"):
+        st.info("Model bulunamadı."); return
+
+    eval_results = saved["eval_results"]
+    y_test = saved["y_test"]
+    feature_names = saved["feature_names"]
+    comp_df = saved["comparison_table"]
+    models = saved["models"]
+    train_info = saved["train_results"]
+    best = saved["best_model"]
+    best_ev = eval_results[best]
+
+    st.success(f"🏆 **En İyi Model: {best}** · F1: `{best_ev['f1']:.4f}` · "
+               f"Acc: `{best_ev['accuracy']:.4f}` · MCC: `{best_ev['mcc']:.4f}`")
+
+    st.markdown("#### Karşılaştırma Tablosu")
+    st.dataframe(comp_df.style.format("{:.4f}").highlight_max(axis=0, color="#1d4ed8"),
+                 use_container_width=True)
+
+    st.markdown("#### Performans Karşılaştırması")
+    st.pyplot(ad.plot_metric_comparison(comp_df)); plt.close()
+
+    st.markdown(f"#### Confusion Matrix — {best}")
+    y_pred = train_info[best]["y_pred"]
+    st.pyplot(ad.plot_confusion(y_test, y_pred, best)); plt.close()
+
+    from sklearn.metrics import confusion_matrix as _cm
+    tn, fp, fn, tp = _cm(y_test, y_pred).ravel()
+    st.info(
+        f"**TP={tp}** · **TN={tn}** · **FP={fp}** · **FN={fn}**  \n"
+        f"Recall (anomali yakalama): **%{tp/(tp+fn)*100:.1f}**"
+    )
+
+    st.markdown("#### ROC Eğrileri")
+    roc_data = {}
+    for name in saved["model_names"]:
+        proba = train_info[name].get("y_proba")
+        if proba is not None:
+            from sklearn.metrics import roc_curve as _rc, auc as _auc
+            fpr, tpr, _ = _rc(y_test, proba)
+            roc_data[name] = (fpr, tpr, _auc(fpr, tpr))
+    if roc_data:
+        st.pyplot(ad.plot_roc(roc_data)); plt.close()
+
+    st.markdown("#### Precision-Recall Eğrileri")
+    pr_data = {}
+    for name in saved["model_names"]:
+        proba = train_info[name].get("y_proba")
+        if proba is not None:
+            from sklearn.metrics import precision_recall_curve as _prc, average_precision_score as _ap
+            pr_arr, rc_arr, _ = _prc(y_test, proba)
+            pr_data[name] = (pr_arr, rc_arr, _ap(y_test, proba))
+    if pr_data:
+        st.pyplot(ad.plot_pr(pr_data)); plt.close()
+
+    st.markdown("#### Özellik Önemleri")
+    fi_name = st.selectbox("Model:", list(models.keys()), key="fi")
+    fig = ad.plot_feature_importance(models[fi_name], feature_names)
+    if fig:
+        st.pyplot(fig); plt.close()
+
+    st.markdown("#### Sınıflandırma Raporu")
+    cr_name = st.selectbox("Model:", list(eval_results.keys()), key="cr")
+    st.code(eval_results[cr_name]["classification_rep"])
+
+
+def page_xai(saved):
+    st.markdown("### 🧠 Açıklanabilirlik (SHAP)")
+    if not saved or not saved.get("models"):
+        st.info("Model bulunamadı."); return
+
+    models = saved["models"]
+    X_test = saved["X_test"]
+    y_test = saved["y_test"]
+
+    name = st.selectbox("Model seçin:", list(models.keys()))
+    model = models[name]
+
+    with st.spinner(f"SHAP hesaplanıyor — {name}..."):
+        # Hız için ilk 200 örnek
+        X_sample = X_test.head(200) if len(X_test) > 200 else X_test
+        result = ad.compute_shap(model, X_sample, saved["X_train_sample"])
+
+    st.success(f"✓ {len(X_sample)} örnek üzerinde SHAP hesaplandı")
+
+    st.markdown("#### 1️⃣ Global Özellik Önemi")
+    st.pyplot(ad.plot_shap_bar(result, top_n=15)); plt.close()
+
+    st.markdown("#### 2️⃣ Beeswarm Summary")
+    st.caption("Sağ: anomaliyi artırır · Sol: azaltır · Renk: özellik değeri")
+    st.pyplot(ad.plot_shap_summary(result, top_n=15)); plt.close()
+
+    st.markdown("#### 3️⃣ Lokal Açıklama")
+    idx = st.slider("Örnek #:", 0, len(X_sample) - 1, 0)
+    y_arr = y_test.reset_index(drop=True)
+    actual = int(y_arr.iloc[idx]) if idx < len(y_arr) else -1
+    pred = int(model.predict(X_sample.iloc[[idx]])[0])
+    proba = float(model.predict_proba(X_sample.iloc[[idx]])[0, 1])
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Gerçek", "Anomali" if actual == 1 else "Normal")
+    c2.metric("Tahmin", "Anomali" if pred == 1 else "Normal",
+              delta="Doğru" if pred == actual else "Yanlış",
+              delta_color="normal" if pred == actual else "inverse")
+    c3.metric("Anomali Olasılığı", f"{proba:.1%}")
+    st.pyplot(ad.plot_shap_waterfall(result, idx, top_n=12)); plt.close()
+
+
+def page_predict(raw_df, saved):
+    st.markdown("### 🔬 Manuel Tahmin")
+    st.caption("Hücre özelliklerini gir → anomali ve hastalık tahmini al.")
+
+    if not saved or not saved.get("models") or "preprocessor" not in saved:
+        st.error("Model bulunamadı. `python3 train_models.py` çalıştırın."); return
+
+    df_clean = ad.clean_data(raw_df)
+    df_features = df_clean.drop(columns=[ad.TARGET], errors="ignore")
+    num_cols = df_features.select_dtypes(include="number").columns.tolist()
+    cat_cols = df_features.select_dtypes(include="object").columns.tolist()
+
+    model_names = list(saved["models"].keys())
+    default = saved.get("best_model", model_names[0])
+    chosen = st.selectbox("Tahmin için model:", model_names,
+                          index=model_names.index(default))
+    model = saved["models"][chosen]
+
+    st.markdown("---")
+    st.markdown("#### 📝 Girdi (medyanlar ön doldurulmuş)")
+
+    with st.form("predict_form"):
         input_dict = {}
-
-        # Sayısal alanlar — 3 sütunlu grid
         st.markdown("**Sayısal Özellikler**")
         cols = st.columns(3)
-        for i, col in enumerate(numerical_cols):
-            series = df_features[col].dropna()
-            v_min, v_max = float(series.min()), float(series.max())
-            v_med = float(series.median())
-            # Adım büyüklüğü
+        for i, c in enumerate(num_cols):
+            s = df_features[c].dropna()
+            v_min, v_max = float(s.min()), float(s.max())
+            v_med = float(s.median())
             rng = max(v_max - v_min, 1e-6)
             step = float(rng / 100) if rng < 50 else 1.0
             with cols[i % 3]:
-                input_dict[col] = st.number_input(
-                    col,
-                    min_value=float(v_min - rng),
-                    max_value=float(v_max + rng),
-                    value=v_med,
-                    step=step,
+                input_dict[c] = st.number_input(
+                    c, min_value=float(v_min - rng), max_value=float(v_max + rng),
+                    value=v_med, step=step,
                     format="%.4f" if rng < 10 else "%.2f",
                 )
-
-        # Kategorik alanlar
-        if categorical_cols:
+        if cat_cols:
             st.markdown("**Kategorik Özellikler**")
-            ccols = st.columns(min(3, len(categorical_cols)))
-            for i, col in enumerate(categorical_cols):
-                options = sorted(df_features[col].dropna().unique().tolist())
+            ccols = st.columns(min(3, len(cat_cols)))
+            for i, c in enumerate(cat_cols):
+                opts = sorted(df_features[c].dropna().unique().tolist())
                 with ccols[i % len(ccols)]:
-                    input_dict[col] = st.selectbox(col, options, index=0)
+                    input_dict[c] = st.selectbox(c, opts)
 
         submitted = st.form_submit_button("🔍 Tahmin Et", use_container_width=True)
 
-    if submitted:
+    if not submitted:
+        return
+
+    # Anomali tahmini
+    try:
+        pred, proba = ad.predict_single(input_dict, model, saved["preprocessor"])
+    except Exception as e:
+        st.error(f"Tahmin hatası: {e}"); return
+
+    st.markdown("---")
+    st.markdown("#### 🎯 Anomali Tahmini")
+    c1, c2, c3 = st.columns(3)
+    if pred == 1:
+        c1.error("**ANOMALİ TESPİT EDİLDİ**")
+    else:
+        c1.success("**NORMAL HÜCRE**")
+    c2.metric("Tahmin (0/1)", pred)
+    if proba is not None:
+        c3.metric("Anomali Olasılığı", f"{proba:.1%}")
+        st.progress(min(max(proba, 0.0), 1.0))
+
+    # Hastalık tahmini
+    if "disease" in saved:
         try:
-            pred, proba = predict_single(input_dict, model, saved["preprocessor"])
+            label, top3 = ad.predict_disease(input_dict, saved["disease"])
         except Exception as e:
-            st.error(f"Tahmin sırasında hata: {e}")
-            return
+            st.warning(f"Hastalık tahmini yapılamadı: {e}"); return
 
         st.markdown("---")
-        st.markdown("#### 🎯 Tahmin Sonucu")
-        c1, c2, c3 = st.columns(3)
-        if pred == 1:
-            c1.error("**ANOMALİ TESPİT EDİLDİ**")
+        st.markdown("#### 🧬 Hastalık / Hücre Kategorisi")
+        is_normal = label.lower().startswith("normal")
+        d1, d2 = st.columns([1, 2])
+        if is_normal:
+            d1.success(f"**{label}**")
         else:
-            c1.success("**NORMAL HÜCRE**")
-        c2.metric("Tahmin (0/1)", pred)
-        if proba is not None:
-            c3.metric("Anomali Olasılığı", f"{proba:.1%}")
-            st.progress(min(max(proba, 0.0), 1.0))
+            d1.error(f"**{label}**")
+        d2.caption(f"{len(saved['disease']['classes'])} sınıf · "
+                   f"test acc ≈ {saved['disease']['accuracy']:.1%}")
 
-        # ----------------------------------------------------------
-        # Hastalık tahmini (multi-class)
-        # ----------------------------------------------------------
-        disease_bundle = saved.get("disease")
-        if disease_bundle is not None:
-            try:
-                dx_label, top3 = predict_disease(input_dict, disease_bundle)
-            except Exception as e:
-                st.warning(f"Hastalık tahmini yapılamadı: {e}")
-            else:
-                st.markdown("---")
-                st.markdown("#### 🧬 Hastalık / Hücre Kategorisi Tahmini")
-                is_normal = dx_label.lower().startswith("normal")
-                d1, d2 = st.columns([1, 2])
-                if is_normal:
-                    d1.success(f"**{dx_label}**")
-                else:
-                    d1.error(f"**{dx_label}**")
-                d2.caption(
-                    f"Model {len(disease_bundle['classes'])} kategori arasından seçim yaptı "
-                    f"(test accuracy ≈ {disease_bundle['accuracy']:.1%})."
-                )
+        st.markdown("**Top 3 olası kategori:**")
+        for lbl, p in top3:
+            st.write(f"- `{lbl}` — {p:.1%}")
+            st.progress(min(max(p, 0.0), 1.0))
 
-                st.markdown("**En olası 3 kategori:**")
-                for label, p in top3:
-                    st.write(f"- `{label}` — {p:.1%}")
-                    st.progress(min(max(p, 0.0), 1.0))
+    with st.expander("Modele giden ham girdi"):
+        st.json(input_dict)
+
+
+# ---------------------------------------------------------------------------
+# Ana
+# ---------------------------------------------------------------------------
+def main():
+    saved = load_saved()
+    raw_df = load_raw()
+
+    with st.sidebar:
+        st.markdown("## 🩸 Kan Hücresi Anomali Tespiti")
+        st.markdown("---")
+        page = st.radio(
+            "Sayfa",
+            ["📋 Veri Seti", "📊 Keşifsel Analiz", "🤖 Eğitim",
+             "📈 Sonuçlar", "🧠 Açıklanabilirlik", "🔬 Manuel Tahmin"],
+            label_visibility="collapsed",
+        )
+        st.markdown("---")
+        if saved and saved.get("models"):
+            best = saved.get("best_model", "?")
+            f1 = saved["eval_results"].get(best, {}).get("f1", 0)
+            st.success(f"🏆 **{best}**  \nF1: `{f1:.4f}`")
         else:
-            st.info(
-                "Hastalık sınıflandırıcı bulunamadı. "
-                "`python3 train_models.py` ile yeniden eğitin."
-            )
+            st.error("Model yok. `python3 train_models.py`")
+        st.caption("Klasik ML · Cross-Validation · SHAP")
 
-        with st.expander("Modele giden ham girdi"):
-            st.json(input_dict)
+    st.markdown("# 🩸 Kan Hücresi Anomali Tespiti")
+    st.caption("Klasik ML · 3 Model · 5-Fold CV · SHAP · Manuel Tahmin")
+
+    if page == "📋 Veri Seti":
+        page_dataset(raw_df)
+    elif page == "📊 Keşifsel Analiz":
+        page_eda(raw_df)
+    elif page == "🤖 Eğitim":
+        page_training(saved)
+    elif page == "📈 Sonuçlar":
+        page_results(saved)
+    elif page == "🧠 Açıklanabilirlik":
+        page_xai(saved)
+    elif page == "🔬 Manuel Tahmin":
+        page_predict(raw_df, saved)
 
 
 if __name__ == "__main__":
