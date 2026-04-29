@@ -6,6 +6,7 @@ from .preprocessor import Preprocessor
 from .model_factory import ModelFactory
 from .evaluator import Evaluator
 from .visualizer import Visualizer
+from .explainer import Explainer
 
 __all__ = [
     "DataLoader",
@@ -13,4 +14,5 @@ __all__ = [
     "ModelFactory",
     "Evaluator",
     "Visualizer",
+    "Explainer",
 ]
