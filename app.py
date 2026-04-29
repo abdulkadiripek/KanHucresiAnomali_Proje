@@ -888,7 +888,7 @@ def predict_single(input_dict: dict, model, preprocessor_meta: dict) -> tuple:
     row = pd.DataFrame([input_dict])
 
     cat_cols = row.select_dtypes(include=["object"]).columns.tolist()
-    row = pd.get_dummies(row, columns=cat_cols, drop_first=True)
+    row = pd.get_dummies(row, columns=cat_cols, drop_first=False)
     row = row.reindex(columns=feature_names, fill_value=0).astype(float)
 
     num_present = [c for c in numerical_cols if c in row.columns]
@@ -916,7 +916,7 @@ def predict_disease(input_dict: dict, disease_bundle: dict) -> tuple:
 
     row = pd.DataFrame([input_dict])
     cat_cols = row.select_dtypes(include=["object"]).columns.tolist()
-    row = pd.get_dummies(row, columns=cat_cols, drop_first=True)
+    row = pd.get_dummies(row, columns=cat_cols, drop_first=False)
     row = row.reindex(columns=feature_names, fill_value=0).astype(float)
 
     num_present = [c for c in numerical_cols if c in row.columns]
