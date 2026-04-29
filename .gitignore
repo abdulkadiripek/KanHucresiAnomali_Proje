@@ -1,1 +1,30 @@
-archive/*
+# Veri setleri ve Arşivler
+archive/
+
+# Proje Belgeleri
+Makine Öğrenmesi Dersi Final Projesi.docx
+
+# Kaydedilmiş Modeller
+saved_models/
+
+# Üretilen Grafikler ve Görseller
+*.png
+*.jpg
+*.jpeg
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+core/__pycache__/
+
+# Sanal Ortamlar (Virtual Environments)
+venv/
+env/
+.env/
+.venv/
+
+# IDE ve İşletim Sistemi Dosyaları
+.vscode/
+.idea/
+.DS_Store
