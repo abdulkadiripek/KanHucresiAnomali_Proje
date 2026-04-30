@@ -369,46 +369,105 @@ def page_predict(raw_df, saved):
     if not submitted:
         return
 
-    # Anomali tahmini
+    # Anomali modeli tahmini (ham)
     try:
-        pred, proba = ad.predict_single(input_dict, model, saved["preprocessor"])
+        raw_pred, raw_proba = ad.predict_single(input_dict, model, saved["preprocessor"])
     except Exception as e:
         st.error(f"Tahmin hatası: {e}"); return
+
+    # Hastalık sınıflandırıcı tahmini
+    disease_label = None
+    disease_top3 = None
+    is_normal_category = False
+    normal_total_proba = 0.0
+    if "disease" in saved:
+        try:
+            disease_label, disease_top3, normal_total_proba = ad.predict_disease(
+                input_dict, saved["disease"]
+            )
+            is_normal_category = disease_label.lower().startswith("normal")
+        except Exception as e:
+            st.warning(f"Hastalık tahmini yapılamadı: {e}")
+
+    # Nihai anomali kararı: hastalık kategorisine göre belirle
+    # Normal_WBC, Normal_RBC, Normal_Platelet → normal hücre
+    # Anemia, Leukemia, Infection, Sickle_Cell_Anemia, Artefact → anomali
+    if disease_label is not None:
+        final_pred = 0 if is_normal_category else 1
+        anomaly_proba = 1.0 - normal_total_proba
+    else:
+        final_pred = raw_pred
+        anomaly_proba = raw_proba
 
     st.markdown("---")
     st.markdown("#### 🎯 Anomali Tahmini")
     c1, c2, c3 = st.columns(3)
-    if pred == 1:
+    if final_pred == 1:
         c1.error("**ANOMALİ TESPİT EDİLDİ**")
     else:
         c1.success("**NORMAL HÜCRE**")
-    c2.metric("Tahmin (0/1)", pred)
-    if proba is not None:
-        c3.metric("Anomali Olasılığı", f"{proba:.1%}")
-        st.progress(min(max(proba, 0.0), 1.0))
+    c2.metric("Tahmin (0/1)", final_pred)
+    if anomaly_proba is not None:
+        c3.metric("Anomali Olasılığı", f"{anomaly_proba:.1%}")
+        st.progress(min(max(anomaly_proba, 0.0), 1.0))
 
-    # Hastalık tahmini
-    if "disease" in saved:
-        try:
-            label, top3 = ad.predict_disease(input_dict, saved["disease"])
-        except Exception as e:
-            st.warning(f"Hastalık tahmini yapılamadı: {e}"); return
-
+    # Hastalık kategorisi gösterimi
+    if disease_label is not None:
         st.markdown("---")
         st.markdown("#### 🧬 Hastalık / Hücre Kategorisi")
-        is_normal = label.lower().startswith("normal")
+
+        # Kategori etiketlerinin Türkçe açıklamaları
+        CATEGORY_DESCRIPTIONS = {
+            "Normal_WBC": "Normal beyaz kan hücresi (lökosit). Sağlıklı bağışıklık sistemi hücresi.",
+            "Normal_RBC": "Normal kırmızı kan hücresi (eritrosit). Sağlıklı oksijen taşıyıcı hücre.",
+            "Normal_Platelet": "Normal trombosit. Sağlıklı pıhtılaşma hücresi.",
+            "Anemia": "Anemi — kırmızı kan hücrelerinin sayı veya fonksiyon bozukluğu. Oksijen taşıma kapasitesi düşük.",
+            "Leukemia": "Lösemi — beyaz kan hücrelerinin kontrolsüz çoğalması. Kan kanseri türü.",
+            "Infection": "Enfeksiyon belirtisi — bağışıklık sistemi aktif yanıt veriyor. Hücre morfolojisinde değişiklik.",
+            "Sickle_Cell_Anemia": "Orak hücreli anemi — genetik bir hastalık. Kırmızı kan hücreleri orak şeklinde deforme.",
+            "Artefact": "Artefakt — laboratuvar sürecinde oluşan yapay bozulma. Gerçek hücre anomalisi değil.",
+        }
+
         d1, d2 = st.columns([1, 2])
-        if is_normal:
-            d1.success(f"**{label}**")
+        if is_normal_category:
+            d1.success(f"**{disease_label}**")
         else:
-            d1.error(f"**{label}**")
-        d2.caption(f"{len(saved['disease']['classes'])} sınıf · "
-                   f"test acc ≈ {saved['disease']['accuracy']:.1%}")
+            d1.error(f"**{disease_label}**")
+
+        # Kategori açıklaması
+        desc = CATEGORY_DESCRIPTIONS.get(disease_label, "")
+        if desc:
+            d2.info(f"💬 {desc}")
+
+        # Sonuç özeti
+        n_classes = len(saved['disease']['classes'])
+        acc = saved['disease']['accuracy']
+        if is_normal_category:
+            st.success(
+                f"✅ Bu hücre **{disease_label}** olarak sınıflandırıldı ve **normal** bir hücredir. "
+                f"Anomali tespit edilmedi."
+            )
+        else:
+            st.error(
+                f"⚠️ Bu hücre **{disease_label}** olarak sınıflandırıldı ve bu bir **anomali** durumudur. "
+                f"Detaylı tıbbi değerlendirme önerilir."
+            )
 
         st.markdown("**Top 3 olası kategori:**")
-        for lbl, p in top3:
-            st.write(f"- `{lbl}` — {p:.1%}")
+        for lbl, p in disease_top3:
+            lbl_desc = CATEGORY_DESCRIPTIONS.get(lbl, "")
+            short = lbl_desc.split(".")[0] + "." if lbl_desc else ""
+            st.write(f"- `{lbl}` — **{p:.1%}** {('· _' + short + '_') if short else ''}")
             st.progress(min(max(p, 0.0), 1.0))
+
+        with st.expander("ℹ️ Model bilgisi"):
+            st.markdown(
+                f"Bu tahmin, **{n_classes} farklı hücre/hastalık kategorisi** üzerinde "
+                f"eğitilmiş bir XGBoost sınıflandırıcı tarafından yapılmıştır.  \n"
+                f"Modelin test verisi üzerindeki doğruluk oranı **%{acc*100:.1f}**'dır "
+                f"(yani test örneklerinin %{acc*100:.1f}'unu doğru sınıflandırmıştır).  \n\n"
+                f"**Kategoriler:** {', '.join(f'`{c}`' for c in saved['disease']['classes'])}"
+            )
 
     with st.expander("Modele giden ham girdi"):
         st.json(input_dict)

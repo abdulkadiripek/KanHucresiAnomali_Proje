@@ -444,7 +444,13 @@ def predict_disease(input_dict: dict, bundle: dict) -> tuple:
     classes = bundle["label_encoder"].classes_
     order = np.argsort(proba)[::-1]
     top3 = [(str(classes[i]), float(proba[i])) for i in order[:3]]
-    return str(classes[order[0]]), top3
+
+    # Normal kategorilerin toplam olasılığı
+    normal_proba = sum(
+        float(proba[i]) for i, c in enumerate(classes)
+        if str(c).lower().startswith("normal")
+    )
+    return str(classes[order[0]]), top3, normal_proba
 
 
 # ============================================================================
