@@ -177,26 +177,58 @@ def comparison_table(eval_results: dict) -> pd.DataFrame:
 # ============================================================================
 # 5. GÖRSELLEŞTİRME
 # ============================================================================
-def plot_class_balance(y: pd.Series):
-    counts = y.value_counts().sort_index()
-    fig, ax = plt.subplots(figsize=(6, 5))
-    ax.pie(counts.values, labels=["Normal", "Anomali"], autopct="%1.1f%%",
+def plot_class_distribution_combined(df: pd.DataFrame):
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+    
+    # Pie chart
+    counts = df[TARGET].value_counts().sort_index()
+    axes[0].pie(counts.values, labels=["Normal", "Anomali"], autopct="%1.1f%%",
            colors=["#3b82f6", "#ef4444"], startangle=90,
            wedgeprops=dict(width=0.4))
-    ax.set_title("Sınıf Dağılımı", fontsize=13, weight="bold")
+    axes[0].set_title("Sınıf Dağılımı (Oransal)", fontsize=12, weight="bold")
+    
+    # Bar chart
+    axes[1].bar(["Normal", "Anomali"], counts.values, color=["#3b82f6", "#ef4444"])
+    axes[1].set_title("Sınıf Dağılımı (Sayısal)", fontsize=12, weight="bold")
+    axes[1].set_ylabel("Örnek Sayısı")
+    for i, v in enumerate(counts.values):
+        axes[1].text(i, v + (v * 0.02), str(v), ha="center", fontweight="bold")
+        
+    plt.tight_layout()
     return fig
 
 
-def plot_leakage_correlations(df: pd.DataFrame, leakage_cols: list):
-    num_df = df.select_dtypes(include=["number"])
-    if TARGET not in num_df.columns:
+def plot_disease_category_distribution(df: pd.DataFrame):
+    if "disease_category" not in df.columns:
         return None
-    corr = num_df.corr()[TARGET].drop(TARGET).abs().sort_values()
-    colors = ["#ef4444" if c in leakage_cols else "#3b82f6" for c in corr.index]
-    fig, ax = plt.subplots(figsize=(8, max(4, len(corr) * 0.3)))
-    ax.barh(corr.index, corr.values, color=colors)
-    ax.set_xlabel("|Pearson korelasyonu| (anomaly_label ile)")
-    ax.set_title("Leakage Kanıtı — kırmızı: çıkarılan sütunlar", weight="bold")
+    counts = df["disease_category"].value_counts().sort_values(ascending=True)
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.barh(counts.index, counts.values, color="#10b981")
+    ax.set_title("Hastalık / Hücre Kategorisi Dağılımı", fontsize=12, weight="bold")
+    ax.set_xlabel("Örnek Sayısı")
+    
+    for i, v in enumerate(counts.values):
+        ax.text(v + (max(counts.values) * 0.01), i, str(v), va="center", fontweight="bold", fontsize=9)
+        
+    plt.tight_layout()
+    return fig
+
+
+def plot_correlation_heatmap(df: pd.DataFrame):
+    num_df = df.select_dtypes(include=["number"])
+    corr = num_df.corr()
+    
+    # Masking upper triangle
+    mask = np.triu(np.ones_like(corr, dtype=bool))
+    
+    fig, ax = plt.subplots(figsize=(12, 9))
+    sns.heatmap(corr, mask=mask, annot=True, fmt=".2f", cmap="coolwarm",
+                vmax=1, vmin=-1, center=0, square=True, linewidths=.5,
+                cbar_kws={"shrink": .7}, ax=ax, annot_kws={"size": 7})
+    
+    ax.set_title("Korelasyon Isı Haritası (Sayısal Değişkenler)", fontsize=14, weight="bold")
+    plt.xticks(rotation=45, ha="right", fontsize=8)
+    plt.yticks(fontsize=8)
     plt.tight_layout()
     return fig
 
@@ -210,21 +242,13 @@ def cohens_d(a: pd.Series, b: pd.Series) -> float:
     return float((a.mean() - b.mean()) / pooled) if pooled > 0 else 0.0
 
 
-def plot_cohens_d_top(df: pd.DataFrame, top_n: int = 10):
+def get_top_features(df: pd.DataFrame, top_n: int = 4) -> list:
     num = df.select_dtypes(include=["number"]).drop(columns=[TARGET], errors="ignore")
     g0 = df[df[TARGET] == 0]
     g1 = df[df[TARGET] == 1]
     d_vals = {c: abs(cohens_d(g1[c], g0[c])) for c in num.columns}
-    s = pd.Series(d_vals).sort_values().tail(top_n)
-    fig, ax = plt.subplots(figsize=(8, max(4, len(s) * 0.4)))
-    ax.barh(s.index, s.values, color="#8b5cf6")
-    for x, ls, lbl in [(0.2, "--", "küçük"), (0.5, "--", "orta"), (0.8, "--", "büyük")]:
-        ax.axvline(x, color="gray", ls=ls, lw=0.7, alpha=0.6, label=f"{lbl} ({x})")
-    ax.set_xlabel("|Cohen's d|")
-    ax.set_title(f"Top {top_n} Ayırt Edici Özellik", weight="bold")
-    ax.legend(fontsize=8)
-    plt.tight_layout()
-    return fig, s.sort_values(ascending=False).index.tolist()
+    s = pd.Series(d_vals).sort_values(ascending=False)
+    return s.head(top_n).index.tolist()
 
 
 def plot_kde_grid(df: pd.DataFrame, features: list):
@@ -241,7 +265,7 @@ def plot_kde_grid(df: pd.DataFrame, features: list):
             if len(data) > 1:
                 sns.kdeplot(data, ax=ax, color=color, fill=True, alpha=0.4,
                             label="Normal" if label == 0 else "Anomali")
-        ax.set_title(feat, fontsize=10)
+        ax.set_title(feat, fontsize=10, weight="bold")
         ax.legend(fontsize=8)
     for j in range(len(features), len(axes)):
         axes[j].axis("off")
@@ -249,28 +273,25 @@ def plot_kde_grid(df: pd.DataFrame, features: list):
     return fig
 
 
-def plot_categorical_bias(df: pd.DataFrame, cat_cols: list):
-    """Her kategorik sütun için anomali oranı barları."""
-    cols = [c for c in cat_cols if c in df.columns]
-    if not cols:
+def plot_boxplot_grid(df: pd.DataFrame, features: list):
+    if not features:
         return None
-    baseline = df[TARGET].mean()
-    n = len(cols)
+    n = len(features)
     rows = (n + 1) // 2
-    fig, axes = plt.subplots(rows, 2, figsize=(12, 3.5 * rows))
+    fig, axes = plt.subplots(rows, 2, figsize=(11, 4 * rows))
     axes = np.array(axes).flatten()
-    for i, c in enumerate(cols):
+    
+    for i, feat in enumerate(features):
         ax = axes[i]
-        rates = df.groupby(c)[TARGET].mean().sort_values()
-        ax.bar(rates.index.astype(str), rates.values, color="#10b981")
-        ax.axhline(baseline, color="red", ls="--", lw=1,
-                   label=f"baseline {baseline:.1%}")
-        ax.set_title(c, fontsize=10)
-        ax.set_ylabel("Anomali oranı")
-        ax.tick_params(axis="x", rotation=30)
-        ax.legend(fontsize=7)
-    for j in range(len(cols), len(axes)):
+        sns.boxplot(data=df, x=TARGET, y=feat, ax=ax, palette=["#3b82f6", "#ef4444"])
+        ax.set_title(f"{feat} Dağılımı", fontsize=11, weight="bold")
+        ax.set_xticklabels(["Normal", "Anomali"])
+        ax.set_xlabel("")
+        ax.set_ylabel("Değer")
+        
+    for j in range(len(features), len(axes)):
         axes[j].axis("off")
+        
     plt.tight_layout()
     return fig
 

@@ -113,59 +113,59 @@ def page_dataset(raw_df):
 
 def page_eda(raw_df):
     st.markdown("### 📊 Keşifsel Veri Analizi")
+    st.markdown("Bu bölümde, kan hücresi veri setindeki anomali ve normal hücrelerin istatistiksel dağılımları ve değişkenler arası ilişkiler görselleştirilmiştir.")
+
     df_clean = ad.clean_data(raw_df)
 
-    st.markdown("#### 1️⃣ Veri Sızıntısı (Leakage) Kanıtı")
-    st.caption("Sayısal sütunların hedefe |Pearson korelasyonu|. "
-               "Kırmızı: eğitimden çıkarılanlar.")
-    fig = ad.plot_leakage_correlations(raw_df, ad.LEAKAGE_COLS + ad.ID_COLS)
-    if fig:
-        st.pyplot(fig); plt.close()
-        st.info("`cytodiffusion_anomaly_score` ve `labeller_confidence_score` "
-                "hedefle çok yüksek korelasyona sahip — başka bir model/uzman "
-                "etiketinden geliyor. Eğitime alınsaydı leakage olurdu.")
-
+    # 1. Sınıf Dağılımı
     st.markdown("---")
-    st.markdown("#### 2️⃣ Sınıf Dengesizliği")
-    col1, col2 = st.columns([1, 1])
-    with col1:
-        st.pyplot(ad.plot_class_balance(raw_df[ad.TARGET])); plt.close()
-    with col2:
-        ratio = raw_df[ad.TARGET].mean()
-        st.markdown(
-            f"**Anomali oranı: %{ratio*100:.1f}**  \n\n"
-            "**Tasarım:**  \n"
-            "- `stratify=y` ile train/test split  \n"
-            "- F1-Score birincil metrik (Accuracy yanıltıcı)  \n"
-            "- Balanced Accuracy, MCC, Kappa raporlanır"
-        )
+    st.markdown("#### 1️⃣ Sınıf Dağılımı")
+    st.caption("Veri setindeki hücrelerin 'Normal' ve 'Anomali' olarak dağılımını gösterir. Verinin ne kadar dengesiz olduğunu anlamak için önemlidir.")
+    fig1 = ad.plot_class_distribution_combined(raw_df)
+    if fig1:
+        st.pyplot(fig1); plt.close()
+        st.info("Veri seti dengesiz bir dağılıma sahiptir. Anomali sınıfı veri setinin yaklaşık %32'sini oluştururken, Normal sınıf %68'lik bir çoğunluğa sahiptir. Bu dengesizlik, model eğitimi sırasında 'stratify' işlemi veya F1-Score gibi dengeli metriklerin kullanılmasını gerektirir.")
 
+    # 2. Hastalık / Hücre Kategorisi Dağılımı
     st.markdown("---")
-    st.markdown("#### 3️⃣ En Ayırt Edici Özellikler — Cohen's d")
-    st.caption("Eşikler: 0.2 küçük · 0.5 orta · 0.8 büyük etki büyüklüğü.")
-    fig, top_features = ad.plot_cohens_d_top(df_clean, top_n=10)
-    st.pyplot(fig); plt.close()
+    st.markdown("#### 2️⃣ Hastalık / Hücre Kategorisi Dağılımı")
+    st.caption("Hücrelerin teşhis konulmuş alt kategorilerini gösterir. 'Normal_RBC', 'Infection', 'Leukemia' gibi farklı kan ve anomali türlerinin veri setindeki yoğunluğunu ifade eder.")
+    fig2 = ad.plot_disease_category_distribution(raw_df)
+    if fig2:
+        st.pyplot(fig2); plt.close()
+        st.info("En yaygın normal hücre tipi 'Normal_RBC' iken, en sık görülen anomali kategorisi 'Infection' veya 'Anemia' olabilir. Bazı nadir anomalilerin öğrenilmesi, veri azlığı nedeniyle model için zorlayıcı olabilir.")
+
+    # 3. Korelasyon Isı Haritası
+    st.markdown("---")
+    st.markdown("#### 3️⃣ Korelasyon Isı Haritası (Correlation Heatmap)")
+    st.caption("Sayısal kan değerlerinin birbirleriyle olan doğrusal ilişkilerini (Pearson korelasyonu) ölçer.")
+    fig3 = ad.plot_correlation_heatmap(raw_df)
+    if fig3:
+        st.pyplot(fig3); plt.close()
+        st.info("Kırmızı alanlar güçlü pozitif, mavi alanlar güçlü negatif ilişkileri gösterir. Örneğin, hücre çapı ile hücre hacmi arasında genellikle yüksek korelasyon beklenir. Çok yüksek korelasyona sahip (multicollinearity) değişkenlerin varlığı, bazı modellerin yorumlanabilirliğini etkileyebilir.")
+
+    # Top özellikleri hesapla (KDE ve Boxplot için)
+    top_features = ad.get_top_features(df_clean, top_n=4)
+
+    # 4. Normal vs Anomali - KDE
+    st.markdown("---")
+    st.markdown("#### 4️⃣ Normal vs Anomali — Özellik Dağılımları (KDE)")
+    st.caption("Normal (mavi) ve Anomali (kırmızı) sınıfları arasındaki ayrımı en iyi yapan (Cohen's d skoru en yüksek olan) 4 özelliğin yoğunluk grafiği.")
     if top_features:
-        st.info("En güçlü ayırıcılar: " + ", ".join(f"`{f}`" for f in top_features[:3]))
+        fig4 = ad.plot_kde_grid(df_clean, top_features)
+        if fig4:
+            st.pyplot(fig4); plt.close()
+            st.success(f"Yukarıdaki grafiklerde mavi ve kırmızı tepeciklerin (dağılımların) birbirinden ayrılması, bu özelliklerin anomalileri tespit etmede modele güçlü sinyaller verdiğini gösterir. Gösterilen özellikler: {', '.join(f'`{f}`' for f in top_features)}.")
 
+    # 5. Boxplot
     st.markdown("---")
-    st.markdown("#### 4️⃣ Top 4 Özelliğin Sınıf Bazlı Dağılımı (KDE)")
+    st.markdown("#### 5️⃣ Kan Değerleri Kutu Grafiği (Boxplot)")
+    st.caption("Aynı 4 önemli özelliğin istatistiksel özetini (medyan, çeyreklikler) ve aykırı değerleri (outliers) gösterir.")
     if top_features:
-        fig = ad.plot_kde_grid(df_clean, top_features[:4])
-        if fig:
-            st.pyplot(fig); plt.close()
-            st.success("Mavi (Normal) ve kırmızı (Anomali) dağılımlarındaki "
-                       "kayma → modelin öğrenebileceği sinyal.")
-
-    st.markdown("---")
-    st.markdown("#### 5️⃣ Kategorik Bias Kontrolü")
-    cat_cols = df_clean.select_dtypes(include="object").columns.tolist()
-    if cat_cols:
-        fig = ad.plot_categorical_bias(df_clean, cat_cols)
-        if fig:
-            st.pyplot(fig); plt.close()
-            st.caption("Kırmızı çizgi: genel anomali oranı (baseline). "
-                       "Çubukların baseline'dan sapması = kategorik bias.")
+        fig5 = ad.plot_boxplot_grid(df_clean, top_features)
+        if fig5:
+            st.pyplot(fig5); plt.close()
+            st.info("Kutu grafikleri, anomali sınıfında değerlerin nasıl daha geniş bir aralığa (varyansa) sahip olduğunu veya aykırı değerlerin daha sık görüldüğünü ortaya çıkarabilir. Modele standartlaştırma (StandardScaler) uygulamasının neden önemli olduğu buradan anlaşılabilir.")
 
 
 def page_training(saved):
@@ -272,9 +272,6 @@ def page_results(saved):
     if fig:
         st.pyplot(fig); plt.close()
 
-    st.markdown("#### Sınıflandırma Raporu")
-    cr_name = st.selectbox("Model:", list(eval_results.keys()), key="cr")
-    st.code(eval_results[cr_name]["classification_rep"])
 
 
 def page_xai(saved):
@@ -485,29 +482,21 @@ def main():
         st.markdown("---")
         page = st.radio(
             "Sayfa",
-            ["📋 Veri Seti", "📊 Keşifsel Analiz", "🤖 Eğitim",
-             "📈 Sonuçlar", "🧠 Açıklanabilirlik", "🔬 Manuel Tahmin"],
+            ["📋 Veri Seti", "📊 Keşifsel Analiz",
+             "📈 Eğitim Sonuçları", "🧠 Açıklanabilirlik", "🔬 Manuel Tahmin"],
             label_visibility="collapsed",
         )
         st.markdown("---")
-        if saved and saved.get("models"):
-            best = saved.get("best_model", "?")
-            f1 = saved["eval_results"].get(best, {}).get("f1", 0)
-            st.success(f"🏆 **{best}**  \nF1: `{f1:.4f}`")
-        else:
+        if not (saved and saved.get("models")):
             st.error("Model yok. `python3 train_models.py`")
-        st.caption("Klasik ML · Cross-Validation · SHAP")
 
     st.markdown("# 🩸 Kan Hücresi Anomali Tespiti")
-    st.caption("Klasik ML · 3 Model · 5-Fold CV · SHAP · Manuel Tahmin")
 
     if page == "📋 Veri Seti":
         page_dataset(raw_df)
     elif page == "📊 Keşifsel Analiz":
         page_eda(raw_df)
-    elif page == "🤖 Eğitim":
-        page_training(saved)
-    elif page == "📈 Sonuçlar":
+    elif page == "📈 Eğitim Sonuçları":
         page_results(saved)
     elif page == "🧠 Açıklanabilirlik":
         page_xai(saved)
