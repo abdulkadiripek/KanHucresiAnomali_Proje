@@ -300,20 +300,49 @@ def page_xai(saved):
     st.caption("Sağ: anomaliyi artırır · Sol: azaltır · Renk: özellik değeri")
     st.pyplot(ad.plot_shap_summary(result, top_n=15)); plt.close()
 
-    st.markdown("#### 3️⃣ Lokal Açıklama")
-    idx = st.slider("Örnek #:", 0, len(X_sample) - 1, 0)
+    st.markdown("#### 3️⃣ Örnek Vaka Analizleri (Lokal Açıklama)")
+    
     y_arr = y_test.reset_index(drop=True)
-    actual = int(y_arr.iloc[idx]) if idx < len(y_arr) else -1
-    pred = int(model.predict(X_sample.iloc[[idx]])[0])
-    proba = float(model.predict_proba(X_sample.iloc[[idx]])[0, 1])
-
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Gerçek", "Anomali" if actual == 1 else "Normal")
-    c2.metric("Tahmin", "Anomali" if pred == 1 else "Normal",
-              delta="Doğru" if pred == actual else "Yanlış",
-              delta_color="normal" if pred == actual else "inverse")
-    c3.metric("Anomali Olasılığı", f"{proba:.1%}")
-    st.pyplot(ad.plot_shap_waterfall(result, idx, top_n=12)); plt.close()
+    preds = model.predict(X_sample)
+    
+    tp_idx, tn_idx, err_idx = None, None, None
+    for i in range(len(X_sample)):
+        actual = int(y_arr.iloc[i]) if i < len(y_arr) else -1
+        pred = int(preds[i])
+        
+        if actual == 1 and pred == 1 and tp_idx is None:
+            tp_idx = i
+        elif actual == 0 and pred == 0 and tn_idx is None:
+            tn_idx = i
+        elif actual != pred and err_idx is None:
+            err_idx = i
+            
+        if tp_idx is not None and tn_idx is not None and err_idx is not None:
+            break
+            
+    cases = [
+        (tp_idx, "### Vaka 1: Başarılı Anomali Tespiti (True Positive)"),
+        (tn_idx, "### Vaka 2: Başarılı Normal Hücre Tespiti (True Negative)"),
+        (err_idx, "### Vaka 3: Model Yanılgısı (Hata Analizi)")
+    ]
+    
+    for idx, title in cases:
+        if idx is None:
+            continue
+            
+        st.markdown(title)
+        actual = int(y_arr.iloc[idx]) if idx < len(y_arr) else -1
+        pred = int(preds[idx])
+        proba = float(model.predict_proba(X_sample.iloc[[idx]])[0, 1])
+        
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Gerçek", "Anomali" if actual == 1 else "Normal")
+        c2.metric("Tahmin", "Anomali" if pred == 1 else "Normal",
+                  delta="Doğru" if pred == actual else "Yanlış",
+                  delta_color="normal" if pred == actual else "inverse")
+        c3.metric("Anomali Olasılığı", f"{proba:.1%}")
+        st.pyplot(ad.plot_shap_waterfall(result, idx, top_n=12)); plt.close()
+        st.markdown("---")
 
 
 def page_predict(raw_df, saved):
